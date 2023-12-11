@@ -1,0 +1,727 @@
+# Filter Hapi Result
+
+```{r, filename = "R script", eval = FALSE}
+error_rate_vector = c("default", "90", "80", "70", "60", "50", "40", "30", "20")
+
+for (i in error_rate_vector) {
+  # Create a list to store data frames from individual files
+  co_list <- lapply(1:22, function(chr_id) {
+    readRDS(paste0("D:/sperm_project/sperm_CO_table/QUAL_and_RGQ_aneu_NA_removed_3/hmm_", i, "/chr", chr_id, ".rds"))
+    })
+  
+  # Combine data frames into a single data frame
+  whole_co_merged <- do.call(rbind, co_list)
+  
+  # Generate the file name including the error rate
+  output_file <- paste0("D:/sperm_project/sperm_CO_table/QUAL_and_RGQ_aneu_NA_removed_3/hmm_", i, ".rds")
+  
+  # Save the merged data frame to an RDS file with the correct file name
+  saveRDS(whole_co_merged, output_file)
+}
+
+```
+
+## Outlier Filter
+
+### Outlier Filter on Whole Sperms (This step was embeded in the CO calling step)
+
+```{r, filename = "R script", eval = FALSE}
+outlier_filter_chr_df <- c()
+
+for (chr_id in c(1:22)) {
+  
+  chr_i_CO <- readRDS(paste0("D:/sperm_project/sperm_CO_table/QUAL_and_RGQ/chr", chr_id, ".rds"))
+  
+  sperm_id_list <- unique(chr_i_CO$sperm_id)
+  
+  chr_i_CO$start_order_m_end_order <- NA
+  
+  chr_i_CO$end_order_m_start_order <- NA
+  
+  chr_i_CO$outlier_filter_1 <- 0
+  
+  chr_i_CO$outlier_filter_2 <- 0
+  
+  chr_i_CO$outlier_filter_1_and_2 <- 0
+  
+  chr_i_CO$color <- "azure3"
+  
+  for (sperm in sperm_id_list) {
+    chr_i_CO_sub <- chr_i_CO %>% filter(sperm_id == sperm)
+    
+    if(nrow(chr_i_CO_sub) < 5){
+      chr_i_CO_sub$outlier_filter_1_and_2 = 1
+      chr_i_CO_sub$color[chr_i_CO_sub$outlier_filter_1_and_2 == 1] <- "brown3"
+    }else{
+      chr_i_CO_sub$start_order_m_end_order[2:length(chr_i_CO_sub$start_order_m_end_order)] <- chr_i_CO_sub$hap_position_order.x[2:length(chr_i_CO_sub$hap_position_order.x)] - chr_i_CO_sub$hap_position_order.y[1:length(chr_i_CO_sub$hap_position_order.x) - 1]
+      chr_i_CO_sub$end_order_m_start_order[1:length(chr_i_CO_sub$start_order_m_end_order) - 1] <- chr_i_CO_sub$hap_position_order.x[2:length(chr_i_CO_sub$hap_position_order.x)] - chr_i_CO_sub$hap_position_order.y[1:length(chr_i_CO_sub$hap_position_order.x) - 1]  
+      
+      quartiles_1 <- quantile(chr_i_CO_sub$start_order_m_end_order, probs=c(.25, .75), na.rm = TRUE)
+      quartiles_2 <- quantile(chr_i_CO_sub$end_order_m_start_order, probs=c(.25, .75), na.rm = TRUE)
+      
+      IQR_1 <- IQR(chr_i_CO_sub$start_order_m_end_order[!is.na(chr_i_CO_sub$start_order_m_end_order)])
+      IQR_2 <- IQR(chr_i_CO_sub$end_order_m_start_order[!is.na(chr_i_CO_sub$end_order_m_start_order)])
+      
+      Upper_1 <- as.numeric(quartiles_1[2]) + 1.5*IQR_1 
+      Upper_2 <- as.numeric(quartiles_2[2]) + 1.5*IQR_2 
+      
+      chr_i_CO_sub$outlier_filter_1[chr_i_CO_sub$start_order_m_end_order > Upper_1] <- 1
+      chr_i_CO_sub$outlier_filter_2[chr_i_CO_sub$end_order_m_start_order > Upper_2] <- 1
+      chr_i_CO_sub$outlier_filter_1_and_2[chr_i_CO_sub$start_order_m_end_order > Upper_1 & chr_i_CO_sub$end_order_m_start_order > Upper_2] <- 1
+      
+      chr_i_CO_sub$color[chr_i_CO_sub$outlier_filter_1_and_2 == 1] <- "brown3"
+      
+    }
+    outlier_filter_chr_df <- rbind(outlier_filter_chr_df, chr_i_CO_sub)
+  }
+  
+}
+
+saveRDS(outlier_filter_chr_df, "D:/sperm_project/sperm_CO_table/QUAL_and_RGQ_filtered_table/outlier_exclude_end.rds")
+```
+
+### 85% Quantile Filter on Whole Sperms (This step was embeded in the CO calling step)
+
+```{r, filename = "R script", eval = FALSE}
+outlier_filter_chr_df <- readRDS("D:/sperm_project/sperm_CO_table/QUAL_and_RGQ_filtered_table/outlier_exclude_end.rds")
+
+quantile_filter_chr_df <- c()
+
+for (chr_id in c(1:22)) {
+  
+  chr_i_CO <- outlier_filter_chr_df %>% dplyr::filter(chr == chr_id)
+  
+  sperm_id_list <- unique(chr_i_CO$sperm_id)
+  
+  chr_i_CO$quantile_filter_1 <- 0
+  
+  chr_i_CO$quantile_filter_2 <- 0
+  
+  chr_i_CO$quantile_filter_1_and_2 <- 0
+  
+  for (sperm in sperm_id_list) {
+    chr_i_CO_sub <- chr_i_CO %>% filter(sperm_id == sperm)
+    
+    if(sum(chr_i_CO_sub$outlier_filter_1_and_2) > 0){
+    }else{
+      
+      quantile_1 <- quantile(chr_i_CO_sub$start_order_m_end_order, probs=c(.25, .85), na.rm = TRUE)
+      quantile_2 <- quantile(chr_i_CO_sub$end_order_m_start_order, probs=c(.25, .85), na.rm = TRUE)
+      Upper_1 <- as.numeric(quantile_1[2])
+      Upper_2 <- as.numeric(quantile_2[2])
+      
+      chr_i_CO_sub$quantile_filter_1[chr_i_CO_sub$start_order_m_end_order > Upper_1] <- 1
+      chr_i_CO_sub$quantile_filter_2[chr_i_CO_sub$end_order_m_start_order > Upper_2] <- 1
+      chr_i_CO_sub$quantile_filter_1_and_2[chr_i_CO_sub$start_order_m_end_order > Upper_1 & chr_i_CO_sub$end_order_m_start_order > Upper_2] <- 1
+      
+      chr_i_CO_sub$color[chr_i_CO_sub$quantile_filter_1_and_2 == 1] <- "blue"
+      
+    }
+    quantile_filter_chr_df <- rbind(quantile_filter_chr_df, chr_i_CO_sub)
+  }
+  
+}
+
+saveRDS(quantile_filter_chr_df, "D:/sperm_project/sperm_CO_table/QUAL_and_RGQ_filtered_table/exclude_end_quantile_85.rds")
+```
+
+### 75% Quantile Filter on Whole Sperms
+
+```{r, filename = "R script", eval = FALSE}
+error_rate_vector = c("40", "30", "20")
+
+
+for (i in error_rate_vector) {
+  
+  outlier_filter_chr_df <- readRDS(paste0("D:/sperm_project/sperm_CO_table/QUAL_and_RGQ_aneu_NA_removed_3/hmm_", i, ".rds"))
+  quantile_filter_chr_df <- c()
+  
+  for (chr_id in c(1:22)) {
+    
+    chr_i_CO <- outlier_filter_chr_df %>% dplyr::filter(chr == chr_id)
+    sperm_id_list <- unique(chr_i_CO$sperm_id)
+    
+    chr_i_CO$single_sperm_quantile_filter_1_75 <- 0
+    chr_i_CO$single_sperm_quantile_filter_2_75 <- 0
+    chr_i_CO$single_sperm_quantile_filter_1_and_2_75 <- 0
+    
+    for (sperm in sperm_id_list) {
+      chr_i_CO_sub <- chr_i_CO %>% filter(sperm_id == sperm)
+      
+      if(nrow(chr_i_CO_sub) < 5){
+      chr_i_CO_sub$quantile_filter_1_and_2_75 = 1
+      chr_i_CO_sub$color[chr_i_CO_sub$quantile_filter_1_and_2_75 == 1] <- "brown3"
+      }else{
+        
+        single_sperm_quantiles_1 <- quantile(chr_i_CO_sub$start_order_m_end_order, probs=c(.25, .75), na.rm = TRUE)
+        single_sperm_quantiles_2 <- quantile(chr_i_CO_sub$end_order_m_start_order, probs=c(.25, .75), na.rm = TRUE)
+        
+        single_sperm_Upper_1 <- as.numeric(single_sperm_quantiles_1[2])
+        single_sperm_Upper_2 <- as.numeric(single_sperm_quantiles_2[2])
+        
+        chr_i_CO_sub$single_sperm_quantile_filter_1_75[chr_i_CO_sub$start_order_m_end_order > single_sperm_Upper_1] <- 1
+        chr_i_CO_sub$single_sperm_quantile_filter_2_75[chr_i_CO_sub$end_order_m_start_order > single_sperm_Upper_2] <- 1
+        chr_i_CO_sub$single_sperm_quantile_filter_1_and_2_75[chr_i_CO_sub$start_order_m_end_order > single_sperm_Upper_1 & chr_i_CO_sub$end_order_m_start_order > single_sperm_Upper_2] <- 1
+        chr_i_CO_sub$color[chr_i_CO_sub$single_sperm_quantile_filter_1_and_2_75 == 1] <- "brown3"
+        quantile_filter_chr_df <- rbind(quantile_filter_chr_df, chr_i_CO_sub)
+        }
+  
+    }
+    saveRDS(quantile_filter_chr_df, paste0("D:/sperm_project/sperm_CO_table/QUAL_and_RGQ_aneu_NA_removed_3/hmm_", i, "_Q75.rds"))
+
+  }
+}
+
+```
+
+### 65% Quantile Filter on Whole Sperms
+
+```{r, filename = "R script", eval = FALSE}
+error_rate_vector = c("default", "90", "80", "70", "60", "40", "30", "20")
+
+
+for (i in error_rate_vector) {
+  
+  outlier_filter_chr_df <- readRDS(paste0("D:/sperm_project/sperm_CO_table/QUAL_and_RGQ_aneu_NA_removed_3/hmm_", i, "_Q75.rds"))
+  quantile_filter_chr_df <- c()
+  
+  for (chr_id in c(1:22)) {
+    
+    chr_i_CO <- outlier_filter_chr_df %>% dplyr::filter(chr == chr_id)
+    sperm_id_list <- unique(chr_i_CO$sperm_id)
+    
+    chr_i_CO$single_sperm_quantile_filter_1_65 <- 0
+    chr_i_CO$single_sperm_quantile_filter_2_65 <- 0
+    chr_i_CO$single_sperm_quantile_filter_1_and_2_65 <- 0
+    
+    for (sperm in sperm_id_list) {
+      chr_i_CO_sub <- chr_i_CO %>% filter(sperm_id == sperm)
+      
+      if(nrow(chr_i_CO_sub) < 5){
+      chr_i_CO_sub$quantile_filter_1_and_2_65 = 1
+      chr_i_CO_sub$color[chr_i_CO_sub$quantile_filter_1_and_2_65 == 1] <- "brown3"
+      }else{
+        
+        single_sperm_quantiles_1 <- quantile(chr_i_CO_sub$start_order_m_end_order, probs=c(.25, .65), na.rm = TRUE)
+        single_sperm_quantiles_2 <- quantile(chr_i_CO_sub$end_order_m_start_order, probs=c(.25, .65), na.rm = TRUE)
+        
+        single_sperm_Upper_1 <- as.numeric(single_sperm_quantiles_1[2])
+        single_sperm_Upper_2 <- as.numeric(single_sperm_quantiles_2[2])
+        
+        chr_i_CO_sub$single_sperm_quantile_filter_1_65[chr_i_CO_sub$start_order_m_end_order > single_sperm_Upper_1] <- 1
+        chr_i_CO_sub$single_sperm_quantile_filter_2_65[chr_i_CO_sub$end_order_m_start_order > single_sperm_Upper_2] <- 1
+        chr_i_CO_sub$single_sperm_quantile_filter_1_and_2_65[chr_i_CO_sub$start_order_m_end_order > single_sperm_Upper_1 & chr_i_CO_sub$end_order_m_start_order > single_sperm_Upper_2] <- 1
+        chr_i_CO_sub$color[chr_i_CO_sub$single_sperm_quantile_filter_1_and_2_65 == 1] <- "brown3"
+        quantile_filter_chr_df <- rbind(quantile_filter_chr_df, chr_i_CO_sub)
+        }
+  
+    }
+    saveRDS(quantile_filter_chr_df, paste0("D:/sperm_project/sperm_CO_table/QUAL_and_RGQ_aneu_NA_removed_3/hmm_", i, "_Q65.rds"))
+
+  }
+}
+```
+
+```{r, filename = "R script", eval = FALSE}
+i = "70"
+
+CO_table <- readRDS(paste0("D:/sperm_project/sperm_CO_table/QUAL_and_RGQ_aneu_NA_removed_3/hmm_", i, "_Q65.rds"))
+
+## Order of selection
+## Outlier
+
+outlier_filtered_CO <- CO_table %>% dplyr::filter(outlier_filter_1_and_2 == 1)
+
+
+## Single Sperm 85 qunatile
+
+selected_sperm_and_chr <- unique(outlier_filtered_CO %>% dplyr::select(sperm_id, chr))
+
+remove_outlier_filtered_CO <- dplyr::anti_join(CO_table, selected_sperm_and_chr, by = c("sperm_id", "chr"))
+
+quantile_85_single_sperm_filtered_CO <- remove_outlier_filtered_CO %>% dplyr::filter(single_sperm_quantile_filter_1_and_2 == 1)
+
+
+## Single Sperm 75 quantile 
+
+selected_sperm_and_chr <- unique(quantile_85_single_sperm_filtered_CO %>% dplyr::select(sperm_id, chr))
+
+remove_quantile_85_single_sperm_filtered_CO <-  dplyr::anti_join(remove_outlier_filtered_CO, selected_sperm_and_chr, by = c("sperm_id", "chr"))
+
+quantile_75_single_sperm_filtered_CO <- remove_quantile_85_single_sperm_filtered_CO %>% dplyr::filter( single_sperm_quantile_filter_1_and_2_75 == 1)
+
+## Combine three filter CO
+
+final_filtered_table <- rbind(outlier_filtered_CO, quantile_85_single_sperm_filtered_CO, quantile_75_single_sperm_filtered_CO) %>% mutate(chr = as.numeric(chr)) %>% arrange(Individual, sperm_id, chr)
+
+chr_level_CO_table_new <- final_filtered_table %>% dplyr::mutate(Type = ifelse(grepl("AS", Individual), "AS", "NF"))
+  
+```
+
+```{r, filename = "R script", eval = FALSE}
+##
+## Load the sperm sample name list
+sperm_list_df <- fread("D:/sperm_project/sperm_vcf_file/sperm_sampleList/sperm_sample_nameList.tsv", header = F) %>% as.data.frame()
+
+## Unify the sperm name in normal samples
+colnames(sperm_list_df) <- "sperm_id"
+
+sperm_list_df$sperm_id <- gsub("N", "NF", sperm_list_df$sperm_id)
+sperm_list_df$sperm_id <- gsub("NFF", "NF", sperm_list_df$sperm_id)
+
+## Load the NA deleted sperm
+NA_removed_sperm <- readRDS("D:/sperm_project/Hapi_input/QUAL_and_RGQ_aneu_removed/remove_by_NA_sperm_list.rds")
+
+
+## Load the less 3 sperm individual
+
+less_three_sperm_donor <- readRDS("D:/sperm_project/Hapi_input/QUAL_and_RGQ_aneu_NA_removed_3/remove_donor.rds")
+
+## Remove the aneuploidy sperms
+
+aneuploid_sperms <- c("AS24s5", "AS30s3", "AS30s4", "AS32s4", "AS35s1", "AS41s4", "NF23-1s5", "NF25-1s1", "NF31-2s5", "NF30-2s3", "NF27-3s3", NA_removed_sperm) 
+
+
+sperm_list_df <- sperm_list_df %>% dplyr::filter(!sperm_id %in% aneuploid_sperms)
+
+
+
+sperm_chromosome_level_CO_freq <- data.frame(sperm_id = rep(sperm_list_df[,1], each = 22),
+                                             chr = rep(c(1:22), times = length(sperm_list_df[,1])))
+
+sperm_chromosome_level_CO_freq$Individual <- gsub("s\\d$", "", sperm_chromosome_level_CO_freq$sperm_id)
+
+## Count the number of CO over chromosomes in chr_level_CO_table
+
+chr_level_CO_table_number_table <- chr_level_CO_table_new %>% group_by(Individual, sperm_id, chr) %>% 
+  dplyr::summarise(chromosome_CO_count = n(), .groups = 'drop') %>%
+  as.data.frame()
+
+## Left join
+
+each_sperm_chromosome_level_CO_freq <- left_join(sperm_chromosome_level_CO_freq, chr_level_CO_table_number_table)
+
+## Delete the aneuploidy
+each_sperm_chromosome_level_CO_freq <- each_sperm_chromosome_level_CO_freq %>% dplyr::filter(!sperm_id %in% aneuploid_sperms)
+
+# Delete the aneuploidy donor
+each_sperm_chromosome_level_CO_freq <- each_sperm_chromosome_level_CO_freq %>% dplyr::filter(!Individual %in% c(less_three_sperm_donor))
+
+
+each_sperm_chromosome_level_CO_freq <- each_sperm_chromosome_level_CO_freq %>% mutate(chromosome_CO_count = ifelse(is.na(chromosome_CO_count), 0, chromosome_CO_count)) %>% 
+  mutate(Type = ifelse(grepl("AS", Individual), "AS", "NF"))
+
+
+##
+```
+
+```{r, filename = "R script", eval = FALSE}
+
+# Filter the original dataset to count occurrences of zero chromosome_CO_count
+zero_count_table <- each_sperm_chromosome_level_CO_freq %>%
+  filter(chromosome_CO_count == 0) %>%
+  count(sperm_id)
+
+# Make a copy of the original dataset
+input_data <- each_sperm_chromosome_level_CO_freq
+  
+# Get the sperm_ids to remove based on the threshold
+removed_donor_by_CO_number <- zero_count_table$sperm_id[zero_count_table$n > 15]
+  
+# Filter out donors with less than three sperm
+input_data <- input_data %>%
+  filter(!Individual %in% less_three_sperm_donor)
+  
+# Filter out donors with chromosome_CO_count greater than threshold
+input_data <- input_data %>%
+  filter(!sperm_id %in% removed_donor_by_CO_number)
+  
+# T test on chromosomal crossover number
+AS_group_count <- input_data[input_data$Type == "AS", "chromosome_CO_count"]
+AS_group_count[is.na(AS_group_count)] <- 0
+  
+NF_group_count <- input_data[input_data$Type == "NF", "chromosome_CO_count"]
+NF_group_count[is.na(NF_group_count)] <- 0
+  
+t_test_res <- t.test(AS_group_count, NF_group_count)
+```
+
+```{r, filename = "R script", eval = FALSE}
+
+# Create the plot with larger text size and other customizations
+ggplot(input_data, aes(x = Type, y = chromosome_CO_count)) +
+  geom_jitter(aes(colour = Type), size = 1.5, width = 0.2, height = 0.4) +
+  scale_color_manual(values = c("coral", "cornflowerblue")) +
+  ylim(c(0,10)) +
+  scale_y_continuous(breaks = seq(0, 10, by = 1)) +  # Set custom y-axis tick values
+  labs(x = "", y = "Count") +  # Update axis labels
+  theme_minimal() +  # Use a minimal theme for cleaner appearance
+  theme(text = element_text(size = 18, color = "black"),
+        legend.position="none",
+        axis.text.x = element_text(color = "black"),  # X-axis text color
+        axis.text.y = element_text(color = "black"),
+        panel.border = element_rect(
+          color = "black",  # Border color
+          size = 2,         # Border size (adjust as needed)
+          fill = NA         # No fill inside the border
+          )) + stat_compare_means(method = "wilcox.test", paired = FALSE, label.y = 5.5)
+  
+
+
+
+ggsave(paste0("D:/sperm_project/sperm_CO_table/sperm_CO_each_chr.pdf"), width = 8, height = 8)  
+## sperms on each chromosome
+
+ggplot(input_data, aes(x = Type, y = chromosome_CO_count)) + 
+  geom_jitter(aes(colour = Type), size = 1.5, width = 0.2, height = 0.5) + 
+  scale_color_manual(values = c("coral", "cornflowerblue")) +
+  scale_y_continuous(breaks = seq(0, 10, by = 1), limits = c(0, 6)) +  # Set custom y-axis tick values and limits
+  theme_minimal() +
+  facet_wrap(~ chr, nrow = 2) +
+  theme(
+    panel.grid.major.y = element_line(color = "gray", linewidth = 0.8),  # Adjust the color and size of horizontal gridlines
+    panel.border = element_rect(
+      color = "black",
+      size = 2,
+      fill = NA
+    ),
+    text = element_text(size = 18, color = "black"),
+        legend.position="none",
+        axis.text.x = element_text(color = "black"),  # X-axis text color
+        axis.text.y = element_text(color = "black")
+  ) + stat_compare_means(method = "wilcox.test", paired = FALSE, label.y = 5.5)
+
+```
+
+## remove by invidual
+
+```{r, filename = "R script", eval = FALSE}
+
+i = "70"
+
+CO_table <- readRDS(paste0("D:/sperm_project/sperm_CO_table/QUAL_and_RGQ_aneu_NA_removed_3/hmm_", i, "_Q65.rds"))
+
+## Order of selection
+## Outlier
+
+outlier_filtered_CO <- CO_table %>% dplyr::filter(outlier_filter_1_and_2 == 1)
+
+
+## Single Sperm 85 qunatile
+
+selected_sperm_and_chr <- unique(outlier_filtered_CO %>% dplyr::select(sperm_id, chr))
+
+remove_outlier_filtered_CO <- dplyr::anti_join(CO_table, selected_sperm_and_chr, by = c("sperm_id", "chr"))
+
+quantile_85_single_sperm_filtered_CO <- remove_outlier_filtered_CO %>% dplyr::filter(single_sperm_quantile_filter_1_and_2 == 1)
+
+
+## Single Sperm 75 quantile 
+
+selected_sperm_and_chr <- unique(quantile_85_single_sperm_filtered_CO %>% dplyr::select(sperm_id, chr))
+
+remove_quantile_85_single_sperm_filtered_CO <-  dplyr::anti_join(remove_outlier_filtered_CO, selected_sperm_and_chr, by = c("sperm_id", "chr"))
+
+quantile_75_single_sperm_filtered_CO <- remove_quantile_85_single_sperm_filtered_CO %>% dplyr::filter( single_sperm_quantile_filter_1_and_2_75 == 1)
+
+## Combine three filter CO
+
+final_filtered_table <- rbind(outlier_filtered_CO, quantile_85_single_sperm_filtered_CO, quantile_75_single_sperm_filtered_CO) %>% mutate(chr = as.numeric(chr)) %>% arrange(Individual, sperm_id, chr)
+
+chr_level_CO_table_new <- final_filtered_table %>% dplyr::mutate(Type = ifelse(grepl("AS", Individual), "AS", "NF"))
+
+saveRDS(chr_level_CO_table_new, "D:/sperm_project/sperm_CO_table/QUAL_RGQ_aneu_NA_removed_CO_and_clinical_assoc/final_filtered_table.rds")
+
+chr_level_CO_table_new <- readRDS("D:/sperm_project/sperm_CO_table/QUAL_RGQ_aneu_NA_removed_CO_and_clinical_assoc/final_filtered_table.rds")
+```
+
+```{r, filename = "R script", eval = FALSE}
+##
+## Load the sperm sample name list
+sperm_list_df <- fread("D:/sperm_project/sperm_vcf_file/sperm_sampleList/sperm_sample_nameList.tsv", header = F) %>% as.data.frame()
+
+## Unify the sperm name in normal samples
+colnames(sperm_list_df) <- "sperm_id"
+
+sperm_list_df$sperm_id <- gsub("N", "NF", sperm_list_df$sperm_id)
+sperm_list_df$sperm_id <- gsub("NFF", "NF", sperm_list_df$sperm_id)
+
+## Load the NA deleted sperm
+NA_removed_sperm <- readRDS("D:/sperm_project/Hapi_input/QUAL_and_RGQ_aneu_removed/remove_by_NA_sperm_list.rds")
+
+
+## Load the less 3 sperm individual
+
+less_three_sperm_donor <- readRDS("D:/sperm_project/Hapi_input/QUAL_and_RGQ_aneu_NA_removed_3/remove_donor.rds")
+
+## Remove the aneuploidy sperms
+
+aneuploid_sperms <- c("AS24s5", "AS30s3", "AS30s4", "AS32s4", "AS35s1", "AS41s4", "NF23-1s5", "NF25-1s1", "NF31-2s5", "NF30-2s3", "NF27-3s3", NA_removed_sperm) 
+
+
+sperm_list_df <- sperm_list_df %>% dplyr::filter(!sperm_id %in% aneuploid_sperms)
+
+
+
+sperm_chromosome_level_CO_freq <- data.frame(sperm_id = rep(sperm_list_df[,1], each = 22),
+                                             chr = rep(c(1:22), times = length(sperm_list_df[,1])))
+
+sperm_chromosome_level_CO_freq$Individual <- gsub("s\\d$", "", sperm_chromosome_level_CO_freq$sperm_id)
+
+## Count the number of CO over chromosomes in chr_level_CO_table
+
+chr_level_CO_table_number_table <- chr_level_CO_table_new %>% group_by(Individual, sperm_id, chr) %>% 
+  dplyr::summarise(chromosome_CO_count = n(), .groups = 'drop') %>%
+  as.data.frame()
+
+## Left join
+
+each_sperm_chromosome_level_CO_freq <- left_join(sperm_chromosome_level_CO_freq, chr_level_CO_table_number_table)
+
+## Delete the aneuploidy
+each_sperm_chromosome_level_CO_freq <- each_sperm_chromosome_level_CO_freq %>% dplyr::filter(!sperm_id %in% aneuploid_sperms)
+
+# Delete the aneuploidy donor
+each_sperm_chromosome_level_CO_freq <- each_sperm_chromosome_level_CO_freq %>% dplyr::filter(!Individual %in% c(less_three_sperm_donor))
+
+
+each_sperm_chromosome_level_CO_freq <- each_sperm_chromosome_level_CO_freq %>% mutate(chromosome_CO_count = ifelse(is.na(chromosome_CO_count), 0, chromosome_CO_count)) %>% 
+  mutate(Type = ifelse(grepl("AS", Individual), "AS", "NF"))
+
+
+##
+```
+
+```{r, filename = "R script", eval = FALSE}
+
+# Filter the original dataset to count occurrences of zero chromosome_CO_count
+zero_count_table <- each_sperm_chromosome_level_CO_freq %>%
+  dplyr::filter(chromosome_CO_count == 0) %>%
+  dplyr::count(Individual)
+
+# Make a copy of the original dataset
+input_data <- each_sperm_chromosome_level_CO_freq
+  
+# Get the sperm_ids to remove based on the threshold
+removed_donor_by_CO_number <- zero_count_table$Individual[zero_count_table$n > 32]
+
+removed_donor_by_CO_number <- removed_donor_by_CO_number[-c(1,2)]
+
+# Filter out donors with less than three sperm
+input_data <- input_data %>%
+  filter(!Individual %in% less_three_sperm_donor)
+  
+# Filter out donors with chromosome_CO_count greater than threshold
+input_data <- input_data %>%
+  filter(!Individual %in% removed_donor_by_CO_number)
+
+# Save the keep sample and sperms
+kept_samples_and_sperms <- input_data %>% dplyr::select(sperm_id, Individual) %>% distinct()
+
+# Save the keep sample and sperms
+
+saveRDS(kept_samples_and_sperms,"D:/sperm_project/manuscript_09_23_2023/tables/sample_info/kept_samples_and_sperms.rds")
+
+# T test on chromosomal crossover number
+AS_group_count <- input_data[input_data$Type == "AS", "chromosome_CO_count"]
+AS_group_count[is.na(AS_group_count)] <- 0
+  
+NF_group_count <- input_data[input_data$Type == "NF", "chromosome_CO_count"]
+NF_group_count[is.na(NF_group_count)] <- 0
+  
+t_test_res <- t.test(AS_group_count, NF_group_count)
+
+saveRDS(input_data, "D:/sperm_project/sperm_CO_table/QUAL_RGQ_aneu_NA_removed_CO_and_clinical_assoc/each_sperm_each_chr_CO_table.rds")
+```
+
+```{r, filename = "R script", eval = FALSE}
+input_data <- readRDS("D:/sperm_project/sperm_CO_table/QUAL_RGQ_aneu_NA_removed_CO_and_clinical_assoc/each_sperm_each_chr_CO_table.rds")
+
+# Create the plot with larger text size and other customizations
+ggplot(input_data, aes(x = Type, y = chromosome_CO_count)) +
+  geom_jitter(aes(colour = Type), size = 0.5, width = 0.2, height = 0.4, alpha = 0.8) +
+  scale_color_manual(values = c("coral", "cornflowerblue")) +
+  ylim(c(0,10)) +
+  scale_y_continuous(breaks = seq(0, 10, by = 1)) +  # Set custom y-axis tick values
+  labs(x = "", y = "Count") +  # Update axis labels
+  theme_minimal() +  # Use a minimal theme for cleaner appearance
+  theme(
+    panel.grid.major.y = element_line(color = "gray", linewidth = 0.2),
+    text = element_text(size = 12, color = "black"),
+        legend.position="none",
+        axis.text.x = element_text(color = "black"),  # X-axis text color
+        axis.text.y = element_text(color = "black"),
+        panel.border = element_rect(
+          color = "black",  # Border color
+          size = 1,         # Border size (adjust as needed)
+          fill = NA         # No fill inside the border
+          )) + stat_compare_means(method = "wilcox.test", paired = FALSE, 
+                                  label.y = 7, 
+                                  label.x = 1.5,
+                                  aes(label = paste0("Pvalue = ", after_stat(p.format))))
+  
+  ggsave(paste0("D:/sperm_project/manuscript_09_23_2023/Figures/section_3_CO_distribution_and_frequency_count/sperm_CO_all_chr.pdf"), width = 4, height = 4)  
+
+## sperms on each chromosome
+input_data$chr <- paste0("chr", input_data$chr)
+input_data$chr <- factor(input_data$chr, levels = paste0("chr", c(1:22)))
+
+ggplot(input_data, aes(x = Type, y = chromosome_CO_count)) + 
+  geom_jitter(aes(colour = Type), size = 0.5, width = 0.2, height = 0.4, alpha = 0.8) + 
+  scale_color_manual(values = c("coral", "cornflowerblue")) +
+  scale_y_continuous(breaks = seq(0, 10, by = 1), limits = c(0, 6)) +  # Set custom y-axis tick values and limits
+  theme_minimal() +
+  facet_wrap(~ chr, nrow = 2) +
+  theme(
+    panel.grid.major.y = element_line(color = "gray", linewidth = 0.5),  # Adjust the color and size of horizontal gridlines
+    panel.border = element_rect(
+      color = "black",
+      size = 0.5,
+      fill = NA
+    ),
+    text = element_text(size = 12, color = "black"),
+    legend.position="none",
+    axis.text.x = element_text(size = 12, color = "black", face = "bold"),  # X-axis text color
+    axis.text.y = element_text(size = 12, color = "black", face = "bold"),
+    axis.title.y = element_text(size = 12, color = "black", face = "bold"),
+    strip.text.x = element_text(
+      size = 12, color = "black", face = "bold"
+      ),
+    strip.text.y = element_text(
+      size = 12, color = "black", face = "bold"
+      )) + 
+  labs(y = "Count", x = "") + stat_compare_means(method = "wilcox.test", paired = FALSE, label.y = 5.5,
+                         aes(label = paste0("P = ", after_stat(p.format))), size = 3)
+
+ggsave(paste0("D:/sperm_project/manuscript_09_23_2023/Figures/section_3_CO_distribution_and_frequency_count/sperm_CO_each_chr.pdf"), width = 8, height = 4) 
+```
+
+## Merge euploidy and aneuploidy
+
+### Merge chr 1 to chr22
+
+## Draw Figure
+
+```{r, filename = "R script", eval = FALSE}
+## Draw Figure
+
+filtered_table <- readRDS("D:/sperm_project/sperm_CO_table/QUAL_and_RGQ_filtered_table/final_filtered_table.rds")
+
+donor_id_list <- unique(filtered_table$Individual)
+
+for (donor in donor_id_list) {
+  
+  test <- test %>% dplyr::filter(Individual == donor, chr == chr, sperm_id == sperm)
+  
+  
+  test <- filtered_table %>% dplyr::filter(Individual == donor)
+  test$chr <- factor(paste0("chr", test$chr), levels = paste0("chr", c(1:22)))
+  
+  
+  sperm_number <- length(unique(test$sperm_id))
+ 
+  
+  ggplot(test, aes(x=start_order_m_end_order, y=end_order_m_start_order)) +
+  geom_point(colour = test$color, size = 0.5 + test$outlier_filter_1_and_2 + test$quantile_filter_1_and_2, alpha = max(0.8, test$outlier_filter_1_and_2 + test$quantile_filter_1_and_2)) +
+  theme(legend.position="none", text=element_text(size=12)) + 
+  theme_bw() + 
+  xlab("d1") + ylab("d2") + 
+  facet_grid(sperm_id ~ chr, scales="free")
+  
+  ggsave(paste0("D:/sperm_project/sperm_CO_table/Figure_filter_d1_d2/Quantail_filter/", donor, ".pdf"), width = 44, height = 2*sperm_number)  
+  
+}
+
+```
+
+## Save the tables
+
+```{r, filename = "R script", eval = FALSE}
+
+each_sperm_chromosome_level_CO_freq <- readRDS("D:/sperm_project/sperm_CO_table/QUAL_RGQ_aneu_NA_removed_CO_and_clinical_assoc/each_sperm_each_chr_CO_table.rds")
+
+## Make the table about Sperm level average crossover
+
+sperm_level_ave_chr_CO_freq <- each_sperm_chromosome_level_CO_freq %>% 
+  group_by(sperm_id) %>% 
+  summarise(Sperm_ave_all_chr_level_CO = mean(chromosome_CO_count, na.rm=TRUE)) %>%  as.data.frame() %>%
+  mutate(Type = ifelse(grepl("AS", sperm_id ), "AS", "NF")) %>% as.data.frame()
+
+saveRDS(sperm_level_ave_chr_CO_freq, "D:/sperm_project/sperm_CO_table/QUAL_RGQ_aneu_NA_removed_CO_and_clinical_assoc/sperm_level_ave_chr_CO_freq.rds")
+
+## Plot the single sperm 
+## sperms on each chromosome
+
+ggplot(sperm_level_ave_chr_CO_freq, aes(x = Type, y = Sperm_ave_all_chr_level_CO)) + 
+  geom_jitter(aes(colour = Type), size = 1, width = 0.2, height = 0.4, alpha = 0.8) + 
+  scale_color_manual(values = c("coral", "cornflowerblue")) +
+  scale_y_continuous(breaks = seq(0, 10, by = 1), limits = c(0, 3)) +  # Set custom y-axis tick values and limits
+  theme_minimal() +
+  theme(
+    panel.grid.major.y = element_line(color = "gray", linewidth = 0.5),  # Adjust the color and size of horizontal gridlines
+    panel.border = element_rect(
+      color = "black",
+      size = 1,
+      fill = NA
+    ),
+    text = element_text(size = 12, color = "black"),
+    legend.position="none",
+    axis.text.x = element_text(size = 12, color = "black", face = "bold"),  # X-axis text color
+    axis.text.y = element_text(size = 12, color = "black", face = "bold"),
+    axis.title.y = element_text(size = 12, color = "black", face = "bold")
+  ) + 
+  labs(y = "Count", x = "") + stat_compare_means(method = "wilcox.test", paired = FALSE, label.y = 3,
+                                         label.x = 1.5,
+                                         aes(label = paste0("P = ", after_stat(p.format))), size = 3)
+
+ggsave(paste0("D:/sperm_project/manuscript_09_23_2023/Figures/section_3_CO_distribution_and_frequency_count/each_sperm_chr_ave.pdf"), width = 4, height = 4) 
+
+
+
+## Individual level all chr ave CO table
+
+sperm_level_ave_chr_CO_freq$Individual <- gsub("s", "", str_extract(sperm_level_ave_chr_CO_freq$sperm_id, str_c(c("AS\\d+s", "AS\\d+-\\d+", "NF\\d+-\\d"), collapse = "|")))
+
+Individual_level_CO_freq <- sperm_level_ave_chr_CO_freq %>% group_by(Individual) %>% summarise(Individual_level_CO_freq = mean(Sperm_ave_all_chr_level_CO, na.rm=TRUE)) %>%  as.data.frame() %>%
+  mutate(Type = ifelse(grepl("AS", Individual), "AS", "NF")) %>% as.data.frame() %>% mutate(energy = exp(Individual_level_CO_freq))
+
+## Save the individual level co freq dataset
+saveRDS(Individual_level_CO_freq, "D:/sperm_project/sperm_CO_table/QUAL_RGQ_aneu_NA_removed_CO_and_clinical_assoc/Individual_level_CO_freq.rds")
+
+
+```
+
+## Average Crossover and Chromosome
+
+```{r, filename = "R script", eval = FALSE}
+
+each_sperm_chromosome_level_CO_freq <- readRDS("D:/sperm_project/sperm_CO_table/QUAL_RGQ_aneu_NA_removed_CO_and_clinical_assoc/each_sperm_each_chr_CO_table.rds")
+fwrite(each_sperm_chromosome_level_CO_freq,
+       "C:/Users/yulei/Google Drive/Research Jia Lab/Project_3_Sperm/manuscript/Tables/each_sperm_chromosome_level_CO_freq.csv")
+
+each_chromosome_ave_CO_freq <- each_sperm_chromosome_level_CO_freq %>% dplyr::group_by(chr, Type) %>% summarize(Average_Value = mean(chromosome_CO_count))
+
+ggplot(data = each_chromosome_ave_CO_freq, aes(x = chr, y = Average_Value, color = Type)) +
+  ggpmisc::stat_poly_eq(aes(label = paste(after_stat(eq.label),
+                               after_stat(rr.label), sep = "*\", \"*"))) +
+  stat_poly_line(se = FALSE) +
+  geom_point(size = 2) + 
+  labs(
+       x = "Chromosome",
+       y = "Ave. CO Number") +
+  scale_color_manual(values=c("coral", "cornflowerblue")) + theme_classic2() +
+  theme(legend.position = "none",
+        panel.border = element_rect(
+          color = "black",
+          size = 1,
+          fill = NA
+          ),
+        text = element_text(size = 12, color = "black"),
+        axis.text.x = element_text(size = 12, color = "black", face = "bold"),  # X-axis text color
+        axis.text.y = element_text(size = 12, color = "black", face = "bold"),
+        axis.title.x = element_text(size = 12, color = "black", face = "bold"),
+        axis.title.y = element_text(size = 12, color = "black", face = "bold")
+        ) + scale_x_continuous(breaks = seq(1, 22, by = 1))
+
+ggsave(paste0("D:/sperm_project/manuscript_09_23_2023/Figures/section_3_CO_distribution_and_frequency_count/CO_and_chromosome.pdf"), width = 8, height = 3)  
+```

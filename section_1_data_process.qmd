@@ -1,0 +1,242 @@
+# Data Preparation
+
+## GATK Genotyping
+
+Calling sperm genotype from fastq files were conducted by [GATK piplines](https://gatk.broadinstitute.org/hc/en-us). This code shows the work after getting the gvcf files. For the blood samples, run whole GATK population SNP calling pipeline and get the vcf file.
+
+## Extract the key features of VCF files
+
+In order to check the correct filter for detecting the genotype, we study the distribution of vcf features. The first step to do that is use the bcftools to extract the key features of the VCF.
+
+```{r, filename = "Bash", eval = FALSE}
+#!/bin/bash -l
+
+### A robust Bash header
+#This option prevents this, by terminating the script if any command exited with a nonzero exit status.
+set -e
+set -u
+set -o pipefail
+###
+
+sperm_sample_nameList="../datasets/sperm_sample_namelist/sperm_sample_nameList.tsv"
+
+for i in {1..22}
+do
+        echo "Filtering chromosome${i}"
+
+        while read vcf_file; do
+                vcf_input="../datasets/sperm_vcf_file/raw_vcf/chr${i}/${vcf_file}.vcf.gz"
+                vcf_features_output="../datasets/sperm_vcf_file/extract_feature_raw_vcf/chr${i}/${vcf_file}.tsv"
+                bcftools query -f '%CHROM %POS %REF %ALT [%DP %QUAL %QD %FS %SOR %MQRankSum %ReadPosRankSum]\n' ${vcf_input} > ${vcf_features_output}
+
+        done <${sperm_sample_nameList}
+
+done
+```
+
+## Read the sperm list
+
+We extract the sperm sample id and make the table that notes the sperm id and donor id information.
+
+```{r, filename = "R script", eval=F}
+sperm_name_list <- data.table::fread("../datasets/sperm_sample_namelist/sperm_sample_nameList.tsv",
+                         header=FALSE) %>% as.data.frame()
+
+colnames(sperm_name_list) <- "sperm_ID"
+
+sperm_name_list <- sperm_name_list %>% dplyr::mutate(donor_ID = gsub("s\\d+", "", sperm_ID)) %>%
+                    dplyr::mutate(donor_ID = gsub("N", "NF", donor_ID)) %>%
+                    dplyr::mutate(donor_ID = gsub("NFF", "NF", donor_ID))
+
+fwrite(sperm_name_list, "../datasets/sperm_sample_namelist/sperm_name_and_donor_nameList.csv")
+
+
+donor_name_list <- unique(sperm_name_list$donor_ID)
+
+
+```
+
+## Check the coverage of the VCF files
+
+```{r, filename = "R script", eval=F}
+
+## For each sperm, collect the chromosome features from 1 to 22
+
+collect_all_chr <- function(sperm_name){
+  
+  sperm_directory <- paste0("../datasets/sperm_vcf_file/", c(1:22), "/", sperm_name, ".tsv")
+  
+  all_chromosomes <- lapply(sperm_directory, function(i){
+  fread(i, header=FALSE)
+  })
+  
+  all_chromosomes_df <- do.call(rbind.data.frame, all_chromosomes)
+  
+  colnames(all_chromosomes_df) <- c("Chr", "Start", "DP", "QUAL")
+  
+  all_chromosomes_df <- all_chromosomes_df %>% dplyr::mutate(End = Start) %>% 
+                        mutate_at(c("Start", "End", "DP", "QUAL"), as.numeric)
+  
+  
+  all_chromosomes_df <- all_chromosomes_df[, c("Chr", "Start", "End", "DP", "QUAL")]
+  
+  
+  all_chromosomes_df <- all_chromosomes_df %>% dplyr::filter(DP != 0)
+  
+  all_chromosomes_DF_GR <- toGRanges(all_chromosomes_df)
+  
+  return(all_chromosomes_DF_GR)
+}
+
+collect_all_sperm <- function(donor_name, sperm_name_list){
+  
+  sub_sperm_name_list <- sperm_name_list %>% dplyr::filter(donor_ID == donor_name)
+  
+  sperm_feature_list <- lapply(sub_sperm_name_list$sperm_ID, collect_all_chr)
+  
+  names(sperm_feature_list) <- sub_sperm_name_list$sperm_ID
+    
+  return(sperm_feature_list)
+                               
+}
+
+## make_SNP_density_plot 
+color_panel <- c("#ddaacc", "#0094ff", "#ff9200", "#008d00", "#fb6f66")
+
+for (i in donor_name_list) {
+    
+    sperm_feature_list <- collect_all_sperm(i, sperm_name_list)
+    
+    pp <- getDefaultPlotParams(plot.type = 4)
+    pp$data1inmargin <- 0
+    pp$bottommargin <- 20
+    
+    pdf(paste0("../figures/figure_coverage_density_plot/",
+               i, ".pdf"), 
+        width=22, 
+        height=5)
+    
+    kp <- karyoploteR::plotKaryotype(genome="hg38", plot.type=4, ideogram.plotter = NULL,
+                    labels.plotter = NULL, plot.params = pp,
+                    main= paste0("SNP Density Plot of Donor:", i), 
+                    chromosomes = paste0("chr", c(1:22)))
+    
+    karyoploteR::kpAddCytobandsAsLine(kp)
+    karyoploteR::kpAddChromosomeNames(kp, srt=45)
+    
+    region_vector <- seq(0,1,length.out = length(sperm_feature_list) + 1)
+      
+    for (j in c(1:length(sperm_feature_list))) {
+      karyoploteR::kpPlotDensity(kp, sperm_feature_list[[j]], window.size = 10e4, col=color_panel[j], r0=region_vector[j],
+                    r1=region_vector[j + 1])
+      karyoploteR::kpAddLabels(kp, labels=names(sperm_feature_list)[j], data.panel = 1, r0=region_vector[j],
+                  r1=region_vector[j + 1])
+    }
+    dev.off()
+  }
+  
+```
+
+## Check the Distribution of VCF Features
+
+In the gvcf files, we have the key features
+
+```{r, filename = "R script", eval=F}
+
+collect_all_chr_features <- function(sperm_name){
+  
+  sperm_directory <- paste0("../datasets/sperm_vcf_file/extract_feature/chr", c(1:22), "/", sperm_name, ".tsv")
+  
+  all_chromosomes <- lapply(sperm_directory, function(i){
+  fread(i, header=FALSE)
+  })
+  
+  all_chromosomes_df <- do.call(rbind.data.frame, all_chromosomes)
+  
+  colnames(all_chromosomes_df) <- c("Chr", "Start", "DP", "QUAL", "QD", "FS", "SOR", "MQRankSum", "ReadPosRankSum")
+  
+  all_chromosomes_df <- all_chromosomes_df %>% dplyr::mutate(End = Start) %>% 
+                        mutate_at(c("Start", "End", "DP", "QUAL", "QD", "FS", "SOR", "MQRankSum", "ReadPosRankSum"), as.numeric)
+  
+  
+  all_chromosomes_df <- all_chromosomes_df[, c("Chr", "Start", "End", "DP", "QUAL", "QD", "FS", "SOR", "MQRankSum", "ReadPosRankSum")]
+  
+  
+  all_chromosomes_df <- all_chromosomes_df %>% dplyr::filter(DP != 0)
+  
+  return(all_chromosomes_df)
+}
+
+
+collect_all_sperm_features <- function(donor_name, sperm_name_list){
+  
+  sub_sperm_name_list <- sperm_name_list %>% dplyr::filter(donor_ID == donor_name)
+  
+  sperm_feature_list <- lapply(sub_sperm_name_list$sperm_ID, collect_all_chr_features)
+  
+  names(sperm_feature_list) <- sub_sperm_name_list$sperm_ID
+    
+  return(sperm_feature_list)
+                               
+}
+
+
+for (i in donor_name_list) {
+  
+  donor <- collect_all_sperm_features(i, sperm_name_list)
+  
+  donor <- dplyr::bind_rows(donor, .id = "sperm_ID")
+  
+  donor <- donor %>% dplyr::select(-c(Chr, Start, End))
+  
+  donor <- melt(donor, id=c("sperm_ID"))
+  
+ 
+  
+  # Density plot in ggplot2
+  
+  ggplot(donor, aes(x = value)) + geom_density(color = 4, fill = 4, alpha = 0.25) + 
+    theme_bw() + 
+    theme(axis.text.x = element_text(angle = 45, vjust = 0.5)) + 
+    facet_grid(vars(sperm_ID), vars(variable), scales = "free")
+  
+  ggsave(paste0("../figures/figure_coverage_density_plot/",
+               i, ".pdf"), 
+        width=14, 
+        height=10)
+
+}
+
+```
+
+## Filter the vcf file
+
+Based on the raw gvcf file, we use the "(QUAL\>10) \|\| (ALT="."&FMT/RGQ\>50)" to filter the genotypes. This procedure was conducted by bcftools.
+
+```{r, filename = "bash script", eval=F}
+sperm_sample_nameList="../datasets/sperm_sample_namelist/sperm_sample_nameList.tsv"
+
+        echo "Extract VCF: QUAL_and_no_ALT"
+
+
+        for i in chr{1..22}
+        do
+                echo "chr: ${i}"
+
+                while read vcf_file; do
+
+                        vcf_input="../datasets/sperm_vcf_file/raw_vcf/chr${i}/${vcf_file}.vcf.gz"
+                        vcf_output="../datasets/sperm_vcf_file/selected_vcf/QUAL_and_RGQ/chr${i}/${vcf_file}.vcf.gz"
+
+                        #echo "vcf input directory: ${vcf_input}"
+                        #echo "vcf output directory: ${vcf_output}"
+
+
+                        bcftools view -O z -o ${vcf_output} -i '(QUAL>10) || (ALT="."&FMT/RGQ>50)' ${vcf_input}
+
+
+                done <${sperm_sample_nameList}
+        done
+
+
+```

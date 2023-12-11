@@ -1,0 +1,228 @@
+# Run HAPI
+Since Hapi is single chromosome based, therefore, we need to run Hapi based the input dataset from last section.
+
+This step takes time and suggest run each donor and each chromosome in parrelle.
+
+## Run HAPI on whole dataset
+
+In this example, we show the script for running one chromosome 1, and for other chromosomes can be calculated use the same code. 
+
+```{r, filename = "R script", eval = FALSE}
+
+#!/usr/bin/env Rscript
+args = commandArgs(trailingOnly=TRUE)
+
+# test if there is at least one argument: if not, return an error
+if (length(args) != 1) {
+  stop("Input the chromosome ID", call.=FALSE)
+} 
+
+chr_id = args[1]
+
+
+# Print input information 
+print(paste0("Hapi run on chromosome: ", chr_id))
+
+
+## Load the library
+
+library(data.table)
+library(dplyr)
+library(stringr)
+library(ggplot2)
+library(tibble)
+library(tidyr)
+library(Hapi)
+library(HMM)
+library(tidyverse)
+library(purrr)
+library(vcfR)
+
+
+## Call crossover on individuals 
+
+print("Chromosome:")
+print(chr_id)
+
+chr_level_CO_table <- c()
+Hapi_input_matrix_List <- readRDS(paste0("~/shared/LeiYu/sperm_project/Hapi_input/QUAL_and_RGQ_aneu_NA_removed_3/chr", chr_id, ".rds"))
+
+
+
+### identify crossover probabilities
+for (error_rate_co in c(0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8)) {
+  
+  chr_level_CO_table <- c()
+  
+  cv_hmm = initHMM(States=c("F","M"), 
+                 Symbols=c("f","m"), 
+                 transProbs=matrix(c(0.99999, 0.00001, 0.00001, 0.99999),2),
+                 emissionProbs=matrix(c(1 - error_rate_co, error_rate_co, error_rate_co, 1 - error_rate_co),2), 
+                 startProbs = c(0.5,0.5))
+  
+  for (patient in names(Hapi_input_matrix_List)) {
+    possibleError <-tryCatch(
+      {
+        sorted_hapi_input_matrix <- Hapi_input_matrix_List[[patient]]
+        position <- sorted_hapi_input_matrix$pos
+        position_order <- c(1:length(position))
+        position_df <- data.frame(pos = position, position_order = position_order)
+        Hapi_sperm_idList <- colnames(sorted_hapi_input_matrix)[5:ncol(sorted_hapi_input_matrix)]
+        hapOutput <- hapiAutoPhase(gmt = sorted_hapi_input_matrix, code = '01')
+        colnames(hapOutput) <- gsub('\\.', "-", colnames(hapOutput))
+        head(hapOutput)
+        
+        ### haplotypes
+        hap <- hapOutput[,c("hap1", "hap2")]
+        head(hap)
+        
+        hap_position <- as.integer(rownames(hap))
+        hap_position_order <- c(1:length(hap_position))
+        hap_position_df <- data.frame(pos = hap_position, hap_position_order = hap_position_order)
+        
+        ### gametes
+        gmt <- hapOutput[, Hapi_sperm_idList]
+        head(gmt)
+
+        ### identify crossover
+        
+        for (Hapi_sperm_id in Hapi_sperm_idList) {
+          CO <- hapiIdentifyCV(hap = hap, gmt = gmt[, Hapi_sperm_id], hmm = cv_hmm)
+          if(is.null(CO)){
+            
+          }else{
+            CO <- left_join(CO, position_df, by = c("start"="pos"))
+            CO <- left_join(CO, position_df, by = c("end"="pos"))
+            CO <- left_join(CO, hap_position_df, by = c("start"="pos"))
+            CO <- left_join(CO, hap_position_df, by = c("end"="pos"))
+            
+            Hapi_sperm_id <- gsub("N", "NF", Hapi_sperm_id)
+            Hapi_sperm_id <- gsub("NFF", "NF", Hapi_sperm_id)
+            
+            df <- cbind(Individual = patient, sperm_id = Hapi_sperm_id, chr=chr_id, CO)
+            chr_level_CO_table <- rbind(chr_level_CO_table, df)
+          }
+        }
+        
+        },
+      error=function(e) e)
+    if(inherits(possibleError, "error")) next
+    }
+  
+  ## Do the outlier filter
+  outlier_filter_chr_df <- c()
+  
+  chr_i_CO <- chr_level_CO_table
+  
+  sperm_id_list <- unique(chr_i_CO$sperm_id)
+  
+  chr_i_CO$start_order_m_end_order <- NA
+  
+  chr_i_CO$end_order_m_start_order <- NA
+  
+  chr_i_CO$outlier_filter_1 <- 0
+  
+  chr_i_CO$outlier_filter_2 <- 0
+  
+  chr_i_CO$outlier_filter_1_and_2 <- 0
+  
+  chr_i_CO$color <- "azure3"
+  
+  for (sperm in sperm_id_list) {
+    chr_i_CO_sub <- chr_i_CO %>% filter(sperm_id == sperm)
+    
+    if(nrow(chr_i_CO_sub) < 5){
+      chr_i_CO_sub$outlier_filter_1_and_2 = 1
+      chr_i_CO_sub$color[chr_i_CO_sub$outlier_filter_1_and_2 == 1] <- "brown3"
+    }else{
+      
+      chr_i_CO_sub$start_order_m_end_order[2:length(chr_i_CO_sub$start_order_m_end_order)] <- chr_i_CO_sub$hap_position_order.x[2:length(chr_i_CO_sub$hap_position_order.x)] - chr_i_CO_sub$hap_position_order.y[1:length(chr_i_CO_sub$hap_position_order.x) - 1]
+      chr_i_CO_sub$end_order_m_start_order[1:length(chr_i_CO_sub$start_order_m_end_order) - 1] <- chr_i_CO_sub$hap_position_order.x[2:length(chr_i_CO_sub$hap_position_order.x)] - chr_i_CO_sub$hap_position_order.y[1:length(chr_i_CO_sub$hap_position_order.x) - 1]  
+      
+      quartiles_1 <- quantile(chr_i_CO_sub$start_order_m_end_order, probs=c(.25, .75), na.rm = TRUE)
+      quartiles_2 <- quantile(chr_i_CO_sub$end_order_m_start_order, probs=c(.25, .75), na.rm = TRUE)
+      
+      IQR_1 <- IQR(chr_i_CO_sub$start_order_m_end_order[!is.na(chr_i_CO_sub$start_order_m_end_order)])
+      IQR_2 <- IQR(chr_i_CO_sub$end_order_m_start_order[!is.na(chr_i_CO_sub$end_order_m_start_order)])
+      
+      Upper_1 <- as.numeric(quartiles_1[2]) + 1.5*IQR_1 
+      Upper_2 <- as.numeric(quartiles_2[2]) + 1.5*IQR_2 
+      
+      chr_i_CO_sub$outlier_filter_1[chr_i_CO_sub$start_order_m_end_order > Upper_1] <- 1
+      chr_i_CO_sub$outlier_filter_2[chr_i_CO_sub$end_order_m_start_order > Upper_2] <- 1
+      chr_i_CO_sub$outlier_filter_1_and_2[chr_i_CO_sub$start_order_m_end_order > Upper_1 & chr_i_CO_sub$end_order_m_start_order > Upper_2] <- 1
+      
+      chr_i_CO_sub$color[chr_i_CO_sub$outlier_filter_1_and_2 == 1] <- "brown3"
+      
+    }
+    outlier_filter_chr_df <- rbind(outlier_filter_chr_df, chr_i_CO_sub)
+  }
+  
+  ### Outlier filter end 
+  
+  ### Quantile filter start
+  
+  chr_i_CO <- outlier_filter_chr_df
+  quantile_filter_chr_df <- c()
+  sperm_id_list <- unique(chr_i_CO$sperm_id)
+  
+  chr_i_CO$start_order_m_end_order <- NA
+  chr_i_CO$end_order_m_start_order <- NA
+  
+  chr_i_CO$single_sperm_quantile_filter_1 <- 0
+  chr_i_CO$single_sperm_quantile_filter_2 <- 0
+  chr_i_CO$single_sperm_quantile_filter_1_and_2 <- 0
+  chr_i_CO$whole_sperm_chr_quantile_filter_1 <- 0
+  chr_i_CO$whole_sperm_chr_quantile_filter_2 <- 0
+  chr_i_CO$whole_sperm_chr_quantile_filter_1_and_2 <- 0
+  
+  chr_i_CO$color <- "azure3"
+  
+  for (sperm in sperm_id_list) {
+    
+    chr_i_CO_sub <- chr_i_CO %>% filter(sperm_id == sperm)
+    
+    if(nrow(chr_i_CO_sub) < 5){
+      chr_i_CO_sub$quantile_filter_1_and_2 = 1
+      chr_i_CO_sub$color[chr_i_CO_sub$quantile_filter_1_and_2 == 1] <- "brown3"
+      }else{
+        
+        chr_i_CO_sub$start_order_m_end_order[2:length(chr_i_CO_sub$start_order_m_end_order)] <- chr_i_CO_sub$hap_position_order.x[2:length(chr_i_CO_sub$hap_position_order.x)] - chr_i_CO_sub$hap_position_order.y[1:length(chr_i_CO_sub$hap_position_order.x) - 1]
+        chr_i_CO_sub$end_order_m_start_order[1:length(chr_i_CO_sub$start_order_m_end_order) - 1] <- chr_i_CO_sub$hap_position_order.x[2:length(chr_i_CO_sub$hap_position_order.x)] - chr_i_CO_sub$hap_position_order.y[1:length(chr_i_CO_sub$hap_position_order.x) - 1]  
+        
+        single_sperm_quantiles_1 <- quantile(chr_i_CO_sub$start_order_m_end_order, probs=c(.25, .85), na.rm = TRUE)
+        single_sperm_quantiles_2 <- quantile(chr_i_CO_sub$end_order_m_start_order, probs=c(.25, .85), na.rm = TRUE)
+        
+        single_sperm_Upper_1 <- as.numeric(single_sperm_quantiles_1[2])
+        single_sperm_Upper_2 <- as.numeric(single_sperm_quantiles_2[2])
+        
+        chr_i_CO_sub$single_sperm_quantile_filter_1[chr_i_CO_sub$start_order_m_end_order > single_sperm_Upper_1] <- 1
+        chr_i_CO_sub$single_sperm_quantile_filter_2[chr_i_CO_sub$end_order_m_start_order > single_sperm_Upper_2] <- 1
+        chr_i_CO_sub$single_sperm_quantile_filter_1_and_2[chr_i_CO_sub$start_order_m_end_order > single_sperm_Upper_1 & chr_i_CO_sub$end_order_m_start_order > single_sperm_Upper_2] <- 1
+        chr_i_CO_sub$color[chr_i_CO_sub$single_sperm_quantile_filter_1_and_2 == 1] <- "brown3"
+        quantile_filter_chr_df <- rbind(quantile_filter_chr_df, chr_i_CO_sub)
+        }
+  }
+  
+    whole_sperm_chr_quantiles_1 <- quantile(quantile_filter_chr_df$start_order_m_end_order, probs=c(.25, .85), na.rm = TRUE)
+    whole_sperm_chr_quantiles_2 <- quantile(quantile_filter_chr_df$end_order_m_start_order, probs=c(.25, .85), na.rm = TRUE)
+    
+    whole_sperm_chr_Upper_1 <- as.numeric(whole_sperm_chr_quantiles_1[2])
+    whole_sperm_chr_Upper_2 <- as.numeric(whole_sperm_chr_quantiles_2[2])
+    
+    quantile_filter_chr_df$whole_sperm_chr_quantile_filter_1[quantile_filter_chr_df$start_order_m_end_order > whole_sperm_chr_Upper_1] <- 1
+    
+    quantile_filter_chr_df$whole_sperm_chr_quantile_filter_2[quantile_filter_chr_df$end_order_m_start_order > whole_sperm_chr_Upper_2] <- 1
+    
+    quantile_filter_chr_df$whole_sperm_chr_quantile_filter_1_and_2[quantile_filter_chr_df$start_order_m_end_order > whole_sperm_chr_Upper_1 & quantile_filter_chr_df$end_order_m_start_order > whole_sperm_chr_Upper_2] <- 1
+    
+    quantile_filter_chr_df$color[quantile_filter_chr_df$whole_sperm_chr_quantile_filter_1_and_2 == 1] <- "brown3"
+    
+    CV_correct_rate <- 100 - error_rate_co*100
+    
+    saveRDS(quantile_filter_chr_df, paste0("~/shared/LeiYu/sperm_project/CO_table/QUAL_and_RGQ_aneu_NA_removed_3/hmm_", CV_correct_rate, "/chr",chr_id, ".rds"))
+
+
+}
+
+```

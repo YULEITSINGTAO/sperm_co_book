@@ -1,0 +1,177 @@
+# Crossover Frequency and Clinical Characteristics Association Study
+
+## CO and Age
+
+```{r, filename = "R script", eval = FALSE}
+Individual_level_CO_freq <- readRDS("D:/sperm_project/sperm_CO_table/QUAL_RGQ_aneu_NA_removed_CO_and_clinical_assoc/Individual_level_CO_freq.rds")
+
+Individual_level_CO_freq$Age <- NA
+
+Individual_level_CO_freq[grepl("AS", Individual_level_CO_freq$Individual), "Age"] <- gsub("AS", "", Individual_level_CO_freq[grepl("AS", Individual_level_CO_freq$Individual), "Individual"])
+Individual_level_CO_freq[grepl("NF", Individual_level_CO_freq$Individual), "Age"] <- gsub("NF", "", Individual_level_CO_freq[grepl("NF", Individual_level_CO_freq$Individual), "Individual"])
+Individual_level_CO_freq$Age <- gsub("-\\d","", Individual_level_CO_freq$Age) %>% as.integer()
+
+ggplot(data = Individual_level_CO_freq, aes(x = Individual_level_CO_freq, y = Age, color = Type)) +
+  ggpmisc::stat_poly_eq(aes(label = paste(after_stat(eq.label),
+                               after_stat(rr.label), sep = "*\", \"*"))) +
+  stat_poly_line(se = FALSE) +
+  geom_point(size = 1) + 
+  labs(
+       x = "Individual Level CO Frequency",
+       y = "Age (in years)") +
+  scale_color_manual(values=c("coral", "cornflowerblue")) + theme_classic2() +
+  theme(legend.position = "top",
+        panel.border = element_rect(
+          color = "black",
+          size = 1,
+          fill = NA
+          ),
+        text = element_text(size = 12, color = "black"),
+        axis.text.x = element_text(size = 12, color = "black", face = "bold"),  # X-axis text color
+        axis.text.y = element_text(size = 12, color = "black", face = "bold"),
+        axis.title.x = element_text(size = 12, color = "black", face = "bold"),
+        axis.title.y = element_text(size = 12, color = "black", face = "bold")
+        ) + 
+  xlim(c(0.5,1.75)) + ylim(c(20,60))
+
+ggsave(paste0("D:/sperm_project/manuscript_09_23_2023/Figures/section_3_CO_distribution_and_frequency_count/CO_and_age.pdf"), width = 3.5, height = 4)  
+```
+
+
+
+## CO and Other Characteristics
+
+```{r, filename = "R script", eval = FALSE}
+
+## Read the clinical info
+
+clinical_outcome <- readRDS("D:/sperm_project/phenotype/clinical_outcome.rds")
+
+## Extract the AS and NF information 
+AS_NF <- clinical_outcome$type
+names(AS_NF) <- clinical_outcome$FID
+AS_NF <- as.data.frame(AS_NF)
+
+## Based on the clinical outcome matrix, we need to change the format of the files (rownames as clinical outcomes and colnums as patients)
+
+clinical_outcome <- clinical_outcome[, -c(2, ncol(clinical_outcome))]
+
+## Replace outliers and replace with mean
+replace_outlier_with_mean <- function(x) {
+  replace(x, x %in% boxplot.stats(x)$out, mean(x))  
+}
+
+clinical_outcome[,-1] <- lapply(clinical_outcome[, -1], replace_outlier_with_mean)
+
+
+clinical_outcome$Individual <- str_extract(clinical_outcome$FID, str_c(c("AS\\d+", "NF\\d+-\\d"), collapse = "|"))
+clinical_outcome[clinical_outcome$FID == "AS32YRB", "Individual"] = "AS32-1" 
+
+## Now we can get clinical outcome with the same Individual ID with Sperm CO Individual IDs
+
+## Next, we are going to do a correltation study about the important clinical outcomes
+
+selected_clinical_outcomes <- c("ZHL", "QXYD", "VAPPJLJSL", "VCL", "VSL", "MAD", "LIN", "STR", "WOB", "BCF")
+
+important_clinical_outcome <- clinical_outcome[, c("Individual", selected_clinical_outcomes)]
+
+Individual_level_CO_freq <- readRDS("D:/sperm_project/sperm_CO_table/QUAL_RGQ_aneu_NA_removed_CO_and_clinical_assoc/Individual_level_CO_freq.rds")
+
+CO_and_clinical_outcome_table <- left_join(Individual_level_CO_freq, important_clinical_outcome, by = "Individual") %>% 
+  mutate_if(is.numeric, ~replace_na(.,mean(., na.rm = TRUE)))
+
+colnames(CO_and_clinical_outcome_table)[2] <- "CO"
+
+colnames(CO_and_clinical_outcome_table)[5:ncol(CO_and_clinical_outcome_table)] <- c("TV", "FM", "APS", "CS", "LV", "AAD", "LIN", "F", "WOB", "BCF")
+
+CO_and_clinical_outcome_table$Age <- NA
+
+CO_and_clinical_outcome_table[grepl("AS", CO_and_clinical_outcome_table$Individual), "Age"] <- gsub("AS", "", CO_and_clinical_outcome_table[grepl("AS", CO_and_clinical_outcome_table$Individual), "Individual"])
+CO_and_clinical_outcome_table[grepl("NF", CO_and_clinical_outcome_table$Individual), "Age"] <- gsub("NF", "", CO_and_clinical_outcome_table[grepl("NF", CO_and_clinical_outcome_table$Individual), "Individual"])
+CO_and_clinical_outcome_table$Age <- gsub("-\\d","", CO_and_clinical_outcome_table$Age) %>% as.integer()
+
+# CO_and_clinical_outcome_table <- CO_and_clinical_outcome_table[!CO_and_clinical_outcome_table$Individual == "NF27-3", ]
+
+saveRDS(CO_and_clinical_outcome_table, "D:/sperm_project/sperm_CO_table/QUAL_RGQ_aneu_NA_removed_CO_and_clinical_assoc/CO_and_clinical_outcome_table.rds")
+
+## Plot TV and FM
+CO_and_clinical_outcome_table <- readRDS("D:/sperm_project/sperm_CO_table/QUAL_RGQ_aneu_NA_removed_CO_and_clinical_assoc/CO_and_clinical_outcome_table.rds")
+
+
+p_TV <- ggplot(data = CO_and_clinical_outcome_table, aes(x = CO, y = TV, color = Type)) +
+  ggpmisc::stat_poly_eq(aes(label = paste(after_stat(eq.label),
+                               after_stat(rr.label), sep = "*\", \"*"))) +
+  stat_poly_line(se = FALSE) +
+  geom_point() + 
+  labs(
+       x = "Individual Level CO Frequency",
+       y = "Total Motility") +
+  scale_color_manual(values=c("coral", "cornflowerblue")) + theme_classic2() +
+  theme(legend.position="top",
+        panel.border = element_rect(
+          color = "black",
+          size = 1,
+          fill = NA
+          ),
+        text = element_text(size = 12, color = "black"),
+        axis.text.x = element_text(size = 12, color = "black", face = "bold"),  # X-axis text color
+        axis.text.y = element_text(size = 12, color = "black", face = "bold"),
+        axis.title.x = element_text(size = 12, color = "black", face = "bold"),
+        axis.title.y = element_text(size = 12, color = "black", face = "bold")) + 
+  xlim(c(0.5,1.75)) +
+  ylim(c(0,100))
+
+ggsave(paste0("D:/sperm_project/manuscript_09_23_2023/Figures/section_3_CO_distribution_and_frequency_count/CO_and_TV.pdf"), width = 3.5, height = 4)  
+
+p_FM <- ggplot(data = CO_and_clinical_outcome_table, aes(x = CO, y = FM, color = Type)) +
+  ggpmisc::stat_poly_eq(aes(label = paste(after_stat(eq.label),
+                               after_stat(rr.label), sep = "*\", \"*"))) +
+  stat_poly_line(se = FALSE) +
+  geom_point() + 
+  labs(
+       x = "Individual Level CO Frequency",
+       y = "FM") +
+  scale_color_manual(values=c("coral", "cornflowerblue")) + theme_classic2() +
+  theme(legend.position="top",
+        panel.border = element_rect(
+          color = "black",
+          size = 2,
+          fill = NA
+          ),
+        text = element_text(size = 12, color = "black"),
+        axis.text.x = element_text(color = "black"),  # X-axis text color
+        axis.text.y = element_text(color = "black"))
+
+ggsave(paste0("D:/sperm_project/sperm_CO_table/CO_and_FM.pdf"), width = 3.5, height = 4)  
+
+
+ggpairs(CO_and_clinical_outcome_table[, c("CO", "TV", "FM", "APS", "CS", "LV", "AAD", "LIN", "F", "WOB", "BCF", "Age", "Type")], aes(color = Type, alpha = 0.5),
+        lower = list(continuous = "smooth", size=0.05),
+        upper = list(continuous = wrap("cor", size = 1.5)),) + 
+  scale_color_manual(values=c("coral", "cornflowerblue")) + 
+  scale_fill_manual(values=c("coral", "cornflowerblue")) + 
+  theme(axis.text = element_text(size = 5),
+        strip.text.x = element_text(size = 5),
+        strip.text.y = element_text(size = 5))
+ggsave(paste0("D:/sperm_project/sperm_CO_table/CO_and_clinical_outcome_ggpair_selected_correlated_motility_characteristics.pdf"), width = 8, height = 8)  
+
+
+```
+
+## Multi-variable Regression 
+
+```{r, filename = "R script", eval = FALSE}
+clinical_outcome_table <- CO_and_clinical_outcome_table %>% dplyr::select(TV, FM, APS, CS, LV, AAD, LIN, F, WOB, BCF, Age, Type)
+
+data.pca <- princomp(clinical_outcome_table[, - 12])
+pca_res <- prcomp(clinical_outcome_table[, - 12], scale. = TRUE)
+
+autoplot(pca_res, data = clinical_outcome_table, colour = 'Type', size = 3)
+
+PC_1_and_2 <- data.pca$loadings[, 1:2]
+
+fviz_pca_var(data.pca, col.var = "black")
+
+lm_CO_cli <- lm(CO  ~ ., data = CO_and_clinical_outcome_table %>% dplyr::select(TV, FM, APS, CS, LV, AAD, LIN, F, WOB, BCF, Age, CO))
+summary(lm_CO_cli)
+```

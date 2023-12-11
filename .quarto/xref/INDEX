@@ -1,0 +1,42 @@
+{
+  "index.qmd": {
+    "index.html": "5c959341",
+    "index.tex": "30afd5f5"
+  },
+  "section_1_data_process.qmd": {
+    "section_1_data_process.html": "b340fe5c"
+  },
+  "section_2_aneuploidy_test.qmd": {
+    "section_2_aneuploidy_test.html": "ded6e3fb"
+  },
+  "section_3_prepare_data_for_Hapi.qmd": {
+    "section_3_prepare_data_for_Hapi.html": "73520467"
+  },
+  "section_4_run_Hapi.qmd": {
+    "section_4_run_Hapi.html": "94bcbeea"
+  },
+  "section_5_filter_HAPI_output.qmd": {
+    "section_5_filter_HAPI_output.html": "f9805df7"
+  },
+  "section_6_compare_CO.qmd": {
+    "section_6_compare_CO.html": "af0f1f53"
+  },
+  "section_7_CO_and_clinical_outcome_association_study.qmd": {
+    "section_7_CO_and_clinical_outcome_association_study.html": "e5024786"
+  },
+  "section_8_CO_whole_genome_association_study.qmd": {
+    "section_8_CO_whole_genome_association_study.html": "41f72178"
+  },
+  "section_9_transcriptome.qmd": {
+    "section_9_transcriptome.html": "ba1f9423"
+  },
+  "intro.qmd": {
+    "intro.html": "2e03c2e6"
+  },
+  "references.qmd": {
+    "references.html": "86806c6e"
+  },
+  "summary.qmd": {
+    "summary.html": "bedfec31"
+  }
+}

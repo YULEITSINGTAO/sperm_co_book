@@ -1,0 +1,240 @@
+# Sperm Transcriptome Study
+
+## Raw count matrix 
+
+```{r, filename = "R script", eval = FALSE}
+## Sperm Transcriptome Study
+
+
+## Read the clinical characteristics
+clinical_characteristics <- fread("D:/sperm_project/sperm_transcriptome/outcomes/important_clinical_characteristics.csv")
+clinical_characteristics <- na.omit(clinical_characteristics)
+
+clinical_characteristics <- clinical_characteristics[order(clinical_characteristics$Patient),]
+
+info_table <- column_to_rownames(clinical_characteristics, var = "Patient") %>% 
+              dplyr::filter(Group == "A" | Group == "N") %>%
+              dplyr::mutate(Group = factor(Group, levels = c("N", "A")))
+
+fwrite(info_table,
+       "D:/sperm_project/manuscript_09_23_2023/Tables/section_5_transcriptome/donor_info.csv", 
+       row.names = TRUE)
+
+## Read raw count matrix
+raw_count_matrix <- readRDS("D:/sperm_project/sperm_transcriptome/raw_count_matrix/raw_count_matrix.rds")
+
+raw_count_matrix <- raw_count_matrix %>% dplyr::select(rownames(info_table))
+
+fwrite(raw_count_matrix,
+       "D:/sperm_project/manuscript_09_23_2023/Tables/section_5_transcriptome/raw_count_matrix.csv", 
+       row.names = TRUE)
+
+
+## Compare the group 
+
+dds <- DESeqDataSetFromMatrix(countData = raw_count_matrix,
+                              colData = info_table,
+                              design = ~ Group)
+
+## Filter gene expression
+
+smallestGroupSize <- 5
+keep <- rowSums(counts(dds) >= 5) >= smallestGroupSize
+dds <- dds[keep,]
+
+
+## DEG Analysis
+
+dds <- DESeq(dds)
+res <- results(dds)
+
+## Select the Key Genes
+
+log2FC_cutoff <- 1
+adj.P_value_cutoff <- 0.05
+
+
+DEG_table <- res %>% as.data.frame() %>%
+              tibble::rownames_to_column(var = "ensembl_gene_id")
+
+selected_DEG_table <- res %>% as.data.frame() %>%
+#  dplyr::filter(abs(log2FoldChange) >= log2FC_cutoff, padj <= adj.P_value_cutoff) %>%
+  dplyr::add_rownames(var = "ensembl_gene_id") %>%
+  dplyr::mutate(ensembl_gene_id = gsub("\\..*", "", ensembl_gene_id))
+
+## Define the ensembl reference 
+
+
+## If human
+ensembl_reference <- "hsapiens_gene_ensembl"
+
+## Add the annotation of gene expression table
+
+ensembl = useMart("ensembl")
+
+esemblist <- as.data.frame(listDatasets(ensembl))
+
+ensembl = useDataset(ensembl_reference, mart=ensembl)
+
+filters = listFilters(ensembl)
+
+attributes = listAttributes(ensembl)
+
+t2g <- getBM(attributes=c('ensembl_gene_id',
+                          "ensembl_gene_id_version",
+                          'chromosome_name',
+                          'start_position',
+                          'end_position', 
+                          'hgnc_symbol', 
+                          'band'), mart = ensembl)
+
+duplicated_ensembl <- t2g[duplicated(t2g$ensembl_gene_id), "ensembl_gene_id"]
+
+selected_DEG_table <- selected_DEG_table %>% filter(!ensembl_gene_id %in% duplicated_ensembl)
+
+selected_DEG_table <- left_join(selected_DEG_table, t2g, by= 'ensembl_gene_id')
+
+selected_DEG_table$arm <- str_to_title(substr(selected_DEG_table$band, 1, 1))
+
+selected_DEG_table <- selected_DEG_table %>% filter(chromosome_name %in% as.character(c(1:22, "X", "Y")))
+
+selected_DEG_table$chromosome_name <- factor(paste0("chr", selected_DEG_table$chromosome_name),
+                                             levels = paste0("chr", c(1:22,"X", "Y")))
+
+selected_DEG_table$arm_pos <- paste0(selected_DEG_table$chromosome_name, selected_DEG_table$arm)
+
+arm_pos_levels <- outer(paste0("chr",c(1:22, "X", "Y")), c("P", "Q"), FUN = "paste0")
+
+arm_pos_levels <- t(arm_pos_levels) 
+
+dim(arm_pos_levels) <- NULL
+
+selected_DEG_table$arm_pos <- factor(selected_DEG_table$arm_pos, 
+                                     levels = arm_pos_levels)
+
+fwrite(selected_DEG_table, "D:/sperm_project/sperm_transcriptome/result_table/DEG_table/DEG_table.csv")
+```
+
+## GSEA analysis 
+
+
+```{r, filename = "R script", eval = FALSE}
+library(org.Hs.eg.db)
+library(clusterProfiler)
+library(enrichplot)
+# we use ggplot2 to add x axis labels (ex: ridgeplot)
+library(ggplot2)
+
+
+DEG_table <- fread("D:/sperm_project/sperm_transcriptome/result_table/DEG_table/DEG_table.csv")
+
+DEG_table <- DEG_table[order(-DEG_table$stat),]
+
+
+# we want the log2 fold change 
+original_gene_list <- DEG_table$log2FoldChange
+
+# name the vector
+names(original_gene_list) <- DEG_table$ensembl_gene_id
+
+# omit any NA values 
+gene_list <- na.omit(original_gene_list)
+
+# sort the list in decreasing order (required for clusterProfiler)
+gene_list = sort(gene_list, decreasing = TRUE)
+
+
+
+```
+
+
+
+
+## Discuss the expression pattern of the CO assoicated SNP genes
+
+```{r, filename = "R script", eval = FALSE}
+
+sign_SNP_df <- as.data.frame(fread("D:/sperm_project/manuscript_09_23_2023/Tables/section_4_CO_GWAS/CO_significant_annotated_SNP/anno_sign_SNP_df.csv"))
+
+sign_SNP_gene_list <- unique(sign_SNP_df$Gene)
+
+deg_table <- as.data.frame(fread("D:/sperm_project/sperm_transcriptome/result_table/DEG_table/DEG_table.csv"))
+
+whole_gene_list <- deg_table$hgnc_symbol
+
+intersect_gene_list <- intersect(sign_SNP_gene_list, whole_gene_list)
+intersect_gene_list <- intersect_gene_list[intersect_gene_list!=""]
+intersect_gene_list <- c(intersect_gene_list, "ART5", "ERCC6L2", "NAV2", "ZRANB3")
+  
+intersect_gene_ensemble_list <- deg_table[deg_table$hgnc_symbol %in% intersect_gene_list, ] %>% dplyr::filter(abs(log2FoldChange) > 0.5)%>% dplyr::select("hgnc_symbol", "ensembl_gene_id_version")
+
+
+intersect_gene_ensemble_list$ensembl_gene_id_version <- gsub("[.]\\d+", "", intersect_gene_ensemble_list$ensembl_gene_id_version)
+
+# Read the raw count matrix
+
+gene_raw_count_matrix <- as.data.frame(fread("D:/sperm_project/sperm_transcriptome/raw_count_matrix/raw_count_matrix.csv"))
+
+rownames(gene_raw_count_matrix) <- gene_raw_count_matrix[, 1]
+
+gene_raw_count_matrix <- gene_raw_count_matrix[, -1]  
+
+rownames(gene_raw_count_matrix) <- gsub("[.]\\d+", "", rownames(gene_raw_count_matrix))
+# Define group info
+
+group <- c(rep("AS", 7), rep("NF", 6))
+names(group) <- c("SCYL", "SLZG", "AWGQ", "AWL", "YMLA", "ALGT", "NZYL", "ALQC", "LCKA", "LZHA", "NDYH", "NYXH", "ALDJ")
+
+gene_raw_count_matrix <- gene_raw_count_matrix[, names(group)]
+# Create DEGList object
+
+DEGL <- DGEList(counts=gene_raw_count_matrix, group=group[colnames(gene_raw_count_matrix)])
+
+# Calculate the cpm
+
+cpm <- cpm(DEGL, log = FALSE, normalized.lib.sizes=TRUE)
+
+fwrite(data.frame(cpm), "D:/sperm_project/manuscript_09_23_2023/Tables/section_5_transcriptome/cpm_matrix.csv", row.names = TRUE)
+
+# Extract the genes
+
+cpm_target_genes <- cpm[intersect_gene_ensemble_list$ensembl_gene_id_version, ]
+rownames(cpm_target_genes) <- intersect_gene_ensemble_list$hgnc_symbol
+t_cpm_target_genes <- t(cpm_target_genes)
+
+t_cpm_target_genes <- t_cpm_target_genes %>% as.data.frame() %>% dplyr::filter() %>% tibble::rownames_to_column(var = "sample")
+
+t_cpm_target_genes$Type <- group[t_cpm_target_genes$sample]
+
+# Melt the data frame from wide to long format
+
+melted_t_cpm_target_genes <- melt(t_cpm_target_genes, id.vars = c("sample", "Type"), variable.name = "Gene", value.name = "Expression")
+
+# Create a boxplot with facets
+ggplot(melted_t_cpm_target_genes, aes(x = Type, y = Expression, color = Type)) +
+  geom_violin(lwd=0.8) +
+  geom_boxplot(width=0.1) +
+  facet_wrap(~ Gene, scales = "free", nrow = 3) +
+  labs(
+    x = "",
+    y = "CPM"
+  ) + 
+  scale_color_manual(values=c("coral", "cornflowerblue"))  +
+  theme_classic()+
+  theme(strip.text.x = element_text(
+        size = 10, color = "black", face = "bold"
+        ),
+        legend.position="NULL",
+        panel.border = element_rect(
+          color = "black",
+          size = 0.8,
+          fill = NA
+          ),
+        text = element_text(size = 10, color = "black"),
+        axis.text.x = element_text(color = "black", size = 10, face = "bold"),  # X-axis text color
+        axis.text.y = element_text(color = "black", size = 10, face = "bold"),
+        axis.title.y = element_text(color = "black", size = 10, face = "bold")
+        ) + stat_compare_means(label = "p.format")
+
+ggsave(paste0("D:/sperm_project/manuscript_09_23_2023/Figures/section_5_CO_GWAS/gene_expression_boxplot.pdf"), width = 7.8, height = 4.8)  
+```

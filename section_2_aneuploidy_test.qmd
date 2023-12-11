@@ -1,0 +1,101 @@
+# Aneuploidy Test
+
+## Sequencing Depth in windows
+
+Based on the aligned sperm sequence and blood sequence, we can use [cnvseq](https://github.com/hliang/cnv-seq) to call the depth in slide window and the CNV.
+
+```{r, filename = "R script (Need to delete)", eval = FALSE}
+
+cnv_count_directory <- "../datasets/sperm_cnv_windows/"
+figure_out_directory <- "../figures/figure_cnv_plot/"
+
+fileList <- list.files(path = cnv_count_directory, pattern = "*.cnv$", all.files = FALSE,
+                       full.names = FALSE, recursive = FALSE, ignore.case = FALSE, include.dirs = FALSE, no.. = FALSE)
+
+CNV_list <- list()
+
+for (sperm_count_file in fileList) {
+  
+  sperm_ID <- gsub("\\..*","", sperm_count_file)
+  
+  ## Input the output from cnv-seq
+  cnv <- read.table(paste0(cnv_count_directory, sperm_count_file), header = T)
+  
+  ## Extract the cnv in chr1 to chr22 and chrX and chrY
+  cnv <- cnv[cnv$chromosome %in% c(paste0("chr", c(1:22))), ]
+  
+  cnv$chromosome <- factor(cnv$chromosome, levels = c(paste0("chr", c(1:22))))
+  
+  cnv <- cnv[order(cnv$chromosome),]
+  
+  ## cnv$color <- colByChr(as.character(cnv$chromosome), colors = "2blues")
+  
+  rownames(cnv) <- NULL
+  
+  ## Delete the log2 NA
+  cnv <- cnv[!is.na(cnv$log2), ]
+  
+  ### Assign (pos or neg) sign to the cnv value
+  cnv$cn.withDir <- ifelse(is.na(cnv$cnv.log2), 0, cnv$cnv.log2)
+  
+  CNV_list[[sperm_ID]] <- cnv
+    
+  cnv_GRanges <- makeGRangesFromDataFrame(cnv)
+  
+  
+  cnv_GRanges$lrr <- cnv$log2
+  
+  
+  # cnv_GRanges$cn <- cnv$cnv.log2
+  # cnv_GRanges$color <- cnv$color
+    
+  cncalls <- loadCopyNumberCalls(cnv, cn.col="cn.withDir")
+  
+  ## 
+  if(FALSE){
+    
+    pdf(paste0(figure_out_directory, sperm_ID, ".pdf"), width = 8.3, height = 2)
+    
+    kp <- plotKaryotype("hg38", plot.type = 4, labels.plotter = NULL, main="", cex=0.02,
+                        chromosomes=paste0("chr", c(1:22)),
+                        ideogram.plotter	= NULL)
+    
+    # Plot the ideogram as a line
+    kpAddCytobandsAsLine(kp)
+    
+    kpAddChromosomeNames(kp, srt=45, cex=0.8)
+    
+    #plotLRR(kp, cnv_GRanges, ymin=-5, ymax=5, labels = NA, out.of.range = "points", out.of.range.col="red",points.col = "#AAAAAAAA", line.at.0 = FALSE, points.cex = 3, add.axis = FALSE)
+  
+    # Modify the "lrr" values to be at most 5
+    cnv_GRanges$lrr <- pmin(abs(cnv_GRanges$lrr), 5) * sign(cnv_GRanges$lrr)
+  
+    plotLRR(kp,
+            cnv_GRanges, 
+            ymin=-4, 
+            ymax=4, 
+            labels = NA, 
+            out.of.range = "points", 
+            out.of.range.col="#DC0000FF", 
+            points.col = "#AAAAAAAA", 
+            line.at.0 = FALSE, 
+            points.cex = 0.8, 
+            add.axis = FALSE)
+  
+  
+  #plotCopyNumberCallsAsLines(kp, cn.calls = cncalls, ymin=-2, ymax=2, lwd=6, add.axis=FALSE, labels = NA, col="#48B774", style="segments", r0=0.4, r1=0.6)
+  
+  kpAddChromosomeSeparators(kp, lwd=1.5, col = "#666666")
+  kpAxis(kp, ymin = -5, ymax=5, tick.pos = -5:5, cex=0.8, offset = 0.1)
+  kpAddLabels(kp, labels = "Log2 Ratio", cex=0.8, srt=90, pos=3, label.margin = 0.03)
+  # Add a title to the karyoplot using the title function
+  kpAddMainTitle(kp, sperm_ID, cex=1)
+  kpAbline(kp, h=0.5, col="black", lwd=2)
+
+  
+  dev.off()
+  }
+}
+
+
+```
