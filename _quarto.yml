@@ -3,9 +3,9 @@ project:
   output-dir: docs
 
 book:
-  title: "Sequencing Sperm Genomes Reveals Reduced Recombination Frequency among Asthenospermia Patients"
+  title: "Reduced Meiotic Crossing Over Linked to Impaired Sperm Motility"
   author: "Lei Yu"
-  date: "12/09/2023"
+  date: "05/10/2024"
   chapters:
     - index.qmd
     - section_1_data_process.qmd

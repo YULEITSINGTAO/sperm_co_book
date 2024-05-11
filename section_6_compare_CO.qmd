@@ -1,6 +1,10 @@
 # Compare CO
 
+Based on the crossover detected from the sperm genome. We can compare two groups abd check if there exist frequency difference between two groups. 
+
 ## CO Distribution
+
+First, we can check the crossover distribution of two groups.
 
 ```{r, filename = "R script", eval = FALSE}
 
