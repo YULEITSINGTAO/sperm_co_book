@@ -1,6 +1,8 @@
 # Crossover Frequency and Clinical Characteristics Association Study
 
-## CO and Age
+In this section, we discuss the association between crossover freqneucy and clinical characteristics.  
+
+## Association between CO and Age (Figure 2 F)
 
 ```{r, filename = "R script", eval = FALSE}
 Individual_level_CO_freq <- readRDS("D:/sperm_project/sperm_CO_table/QUAL_RGQ_aneu_NA_removed_CO_and_clinical_assoc/Individual_level_CO_freq.rds")
@@ -71,7 +73,7 @@ clinical_outcome[clinical_outcome$FID == "AS32YRB", "Individual"] = "AS32-1"
 
 ## Next, we are going to do a correltation study about the important clinical outcomes
 
-selected_clinical_outcomes <- c("ZHL", "QXYD", "VAPPJLJSL", "VCL", "VSL", "MAD", "LIN", "STR", "WOB", "BCF")
+selected_clinical_outcomes <- c("ZHL", "QXYD", "FQXYD", "LIN", "WOB", "BCF")
 
 important_clinical_outcome <- clinical_outcome[, c("Individual", selected_clinical_outcomes)]
 
@@ -82,7 +84,7 @@ CO_and_clinical_outcome_table <- left_join(Individual_level_CO_freq, important_c
 
 colnames(CO_and_clinical_outcome_table)[2] <- "CO"
 
-colnames(CO_and_clinical_outcome_table)[5:ncol(CO_and_clinical_outcome_table)] <- c("TV", "FM", "APS", "CS", "LV", "AAD", "LIN", "F", "WOB", "BCF")
+colnames(CO_and_clinical_outcome_table)[5:ncol(CO_and_clinical_outcome_table)] <- c("TM", "PM", "NP", "LIN", "WOB", "BCF")
 
 CO_and_clinical_outcome_table$Age <- NA
 
@@ -145,7 +147,7 @@ p_FM <- ggplot(data = CO_and_clinical_outcome_table, aes(x = CO, y = FM, color =
 ggsave(paste0("D:/sperm_project/sperm_CO_table/CO_and_FM.pdf"), width = 3.5, height = 4)  
 
 
-ggpairs(CO_and_clinical_outcome_table[, c("CO", "TV", "FM", "APS", "CS", "LV", "AAD", "LIN", "F", "WOB", "BCF", "Age", "Type")], aes(color = Type, alpha = 0.5),
+ggpairs(CO_and_clinical_outcome_table[, c("CO", "TM", "PM", "NP", "LIN", "WOB", "BCF", "Age", "Type")], aes(color = Type, alpha = 0.5),
         lower = list(continuous = "smooth", size=0.05),
         upper = list(continuous = wrap("cor", size = 1.5)),) + 
   scale_color_manual(values=c("coral", "cornflowerblue")) + 
@@ -153,25 +155,8 @@ ggpairs(CO_and_clinical_outcome_table[, c("CO", "TV", "FM", "APS", "CS", "LV", "
   theme(axis.text = element_text(size = 5),
         strip.text.x = element_text(size = 5),
         strip.text.y = element_text(size = 5))
+
 ggsave(paste0("D:/sperm_project/sperm_CO_table/CO_and_clinical_outcome_ggpair_selected_correlated_motility_characteristics.pdf"), width = 8, height = 8)  
 
 
-```
-
-## Multi-variable Regression 
-
-```{r, filename = "R script", eval = FALSE}
-clinical_outcome_table <- CO_and_clinical_outcome_table %>% dplyr::select(TV, FM, APS, CS, LV, AAD, LIN, F, WOB, BCF, Age, Type)
-
-data.pca <- princomp(clinical_outcome_table[, - 12])
-pca_res <- prcomp(clinical_outcome_table[, - 12], scale. = TRUE)
-
-autoplot(pca_res, data = clinical_outcome_table, colour = 'Type', size = 3)
-
-PC_1_and_2 <- data.pca$loadings[, 1:2]
-
-fviz_pca_var(data.pca, col.var = "black")
-
-lm_CO_cli <- lm(CO  ~ ., data = CO_and_clinical_outcome_table %>% dplyr::select(TV, FM, APS, CS, LV, AAD, LIN, F, WOB, BCF, Age, CO))
-summary(lm_CO_cli)
 ```
