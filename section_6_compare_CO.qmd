@@ -2,32 +2,265 @@
 
 Based on the crossover detected from the sperm genome. We can compare two groups abd check if there exist frequency difference between two groups. 
 
-## CO Distribution
+## Figure 2A
+
+The crossovers detected on 2,046 chromosomes (22 autosomes × 93 sperm cells) in the NF group and on 1,144 chromosomes (22 autosomes × 52 sperm cells) in the AS group. 
+
+```{r, filename = "R script", eval = FALSE}
+each_sperm_each_chr_CO_table <- readRDS("dataset/CO_table/each_sperm_each_chr_CO_table.rds")
+
+ggplot(each_sperm_each_chr_CO_table, aes(x = Type, y = chromosome_CO_count, colour = Type)) + 
+    geom_violin(trim= FALSE) +
+  geom_jitter(aes(colour = Type), size = 0.5, width = 0.2, height = 0.4, alpha = 0.8) +
+  scale_color_manual(values = c("coral", "cornflowerblue")) +
+  ylim(c(0,10)) +
+  scale_y_continuous(breaks = seq(0, 10, by = 1)) +  # Set custom y-axis tick values
+  labs(x = "", y = "Count") +  # Update axis labels
+  theme_minimal() +  # Use a minimal theme for cleaner appearance
+  theme(
+    panel.grid.major.y = element_line(color = "gray", linewidth = 0.2),
+    text = element_text(size = 12, color = "black"),
+        legend.position="none",
+        axis.text.x = element_text(color = "black"),  # X-axis text color
+        axis.text.y = element_text(color = "black"),
+        panel.border = element_rect(
+          color = "black",  # Border color
+          size = 1,         # Border size (adjust as needed)
+          fill = NA         # No fill inside the border
+          )) + stat_compare_means(method = "wilcox.test", paired = FALSE, 
+                                  label.y = 7, 
+                                  label.x = 1.5,
+                                  aes(label = paste0("Pvalue = ", after_stat(p.format))))
+  
+  ggsave(paste0("Figures/CO_stats/sperm_CO_all_chr.pdf"), width = 4, height = 4)  
+  
+  
+  
+crossover_count <- each_sperm_each_chr_CO_table %>%
+  group_by(Type, chromosome_CO_count) %>%
+  summarise(freq = n()) %>% group_by(Type) %>%
+  mutate(total_count_in_group = sum(freq), percentage = round(freq/total_count_in_group, 4))
+  
+  
+ggplot(crossover_count, aes(Type, chromosome_CO_count, fill= percentage)) + 
+  geom_tile(colour = "black") + 
+  scale_fill_gradient(low = "white", high = "#E51A6F") +
+  geom_text(aes(label = percentage)) + 
+  theme_classic() +  # Use a minimal theme for cleaner appearance
+  theme(
+    legend.position="none",
+    axis.text.x = element_text(color = "black"),  # X-axis text color
+    axis.text.y = element_text(color = "black")) 
+ggsave(paste0("Figures/CO_stats/each_chromosome_CO.pdf"), width = 4, height = 4)  
+
+
+# Create a basic bar chart for one group
+
+basic_plot <-  ggplot(
+    crossover_count, 
+    aes(
+        x = chromosome_CO_count, 
+        fill = Type, 
+        y = ifelse(
+            test = Type == "AS", 
+            yes = -percentage, 
+            no = percentage
+            )
+        )
+    ) + 
+geom_bar(stat = "identity") 
+
+population_pyramid <- basic_plot +
+  scale_y_continuous(
+    labels = abs, 
+    limits = max(crossover_count$percentage) * c(-1,1)
+  ) + 
+  coord_flip() + 
+  theme_minimal() +
+  labs(
+    x = "Number of CO", 
+    y = "Percentage", 
+    fill = "Group", 
+    title = ""
+  )
+
+```
+
+![Figure 2A](Figures/CO_stats/sperm_CO_all_chr.pdf){width=100%, height=400}
+
+## sperms on each chromosome (Figure 2C)
+
+The average number of crossovers per chromosome was assessed in each of the 93 sperm cells from the NF group and compared to those in each of the 52 sperm cells from the AS group.
+
+```{r, filename = "R script", eval = FALSE}
+input_data$chr <- paste0("chr", input_data$chr)
+input_data$chr <- factor(input_data$chr, levels = paste0("chr", c(1:22)))
+
+ggplot(input_data, aes(x = Type, y = chromosome_CO_count)) + 
+  geom_jitter(aes(colour = Type), size = 0.5, width = 0.2, height = 0.4, alpha = 0.8) + 
+  scale_color_manual(values = c("coral", "cornflowerblue")) +
+  scale_y_continuous(breaks = seq(0, 10, by = 1), limits = c(0, 6)) +  # Set custom y-axis tick values and limits
+  theme_minimal() +
+  facet_wrap(~ chr, nrow = 2) +
+  theme(
+    panel.grid.major.y = element_line(color = "gray", linewidth = 0.5),  # Adjust the color and size of horizontal gridlines
+    panel.border = element_rect(
+      color = "black",
+      size = 0.5,
+      fill = NA
+    ),
+    text = element_text(size = 12, color = "black"),
+    legend.position="none",
+    axis.text.x = element_text(size = 12, color = "black", face = "bold"),  # X-axis text color
+    axis.text.y = element_text(size = 12, color = "black", face = "bold"),
+    axis.title.y = element_text(size = 12, color = "black", face = "bold"),
+    strip.text.x = element_text(
+      size = 12, color = "black", face = "bold"
+      ),
+    strip.text.y = element_text(
+      size = 12, color = "black", face = "bold"
+      )) + 
+  labs(y = "Count", x = "") + stat_compare_means(method = "wilcox.test", paired = FALSE, label.y = 5.5,
+                         aes(label = paste0("P = ", after_stat(p.format))), size = 3)
+
+ggsave(paste0("D:/sperm_project/manuscript_09_23_2023/Figures/section_3_CO_distribution_and_frequency_count/sperm_CO_each_chr.pdf"), width = 8, height = 4) 
+## CO Distribution (Figure 3)
+```
+
+## CO Frequency
+
+## Average crossover of each sperm (Figure 2B)
+
+```{r, filename = "R script", eval = FALSE}
+
+each_sperm_chromosome_level_CO_freq <- readRDS("dataset/CO_table/each_sperm_each_chr_CO_table.rds")
+
+## Make the table about Sperm level average crossover
+
+sperm_level_ave_chr_CO_freq <- each_sperm_chromosome_level_CO_freq %>% 
+  group_by(sperm_id) %>% 
+  summarise(Sperm_ave_all_chr_level_CO = mean(chromosome_CO_count, na.rm=TRUE)) %>%  as.data.frame() %>%
+  mutate(Type = ifelse(grepl("AS", sperm_id ), "AS", "NF")) %>% as.data.frame()
+
+saveRDS(sperm_level_ave_chr_CO_freq, "dataset/CO_table/sperm_level_ave_chr_CO_freq.rds")
+
+## Plot the single sperm 
+## sperms on each chromosome
+
+ggplot(sperm_level_ave_chr_CO_freq, aes(x = Type, y = Sperm_ave_all_chr_level_CO, colour = Type)) + 
+    geom_boxplot() +
+  geom_jitter(aes(colour = Type), size = 1.5, width = 0.2, height = 0.4, alpha = 0.8) + 
+  scale_color_manual(values = c("coral", "cornflowerblue")) +
+  scale_y_continuous(breaks = seq(0, 10, by = 1), limits = c(0, 3)) +  # Set custom y-axis tick values and limits
+  theme_minimal() +
+  theme(
+    panel.grid.major.y = element_line(color = "gray", linewidth = 0.5),  # Adjust the color and size of horizontal gridlines
+    panel.border = element_rect(
+      color = "black",
+      size = 1,
+      fill = NA
+    ),
+    text = element_text(size = 12, color = "black"),
+    legend.position="none",
+    axis.text.x = element_text(size = 12, color = "black", face = "bold"),  # X-axis text color
+    axis.text.y = element_text(size = 12, color = "black", face = "bold"),
+    axis.title.y = element_text(size = 12, color = "black", face = "bold")
+  ) + 
+  labs(y = "Count", x = "") + stat_compare_means(method = "wilcox.test", paired = FALSE, label.y = 3,
+                                         label.x = 1.5,
+                                         aes(label = paste0("P = ", after_stat(p.format))), size = 3)
+
+ggsave(paste0("Figures/CO_stats/each_sperm_chr_ave.pdf"), width = 4, height = 4) 
+
+
+
+## Individual level all chr ave CO table
+
+sperm_level_ave_chr_CO_freq$Individual <- gsub("s", "", str_extract(sperm_level_ave_chr_CO_freq$sperm_id, str_c(c("AS\\d+s", "AS\\d+-\\d+", "NF\\d+-\\d"), collapse = "|")))
+
+Individual_level_CO_freq <- sperm_level_ave_chr_CO_freq %>% group_by(Individual) %>% summarise(Individual_level_CO_freq = mean(Sperm_ave_all_chr_level_CO, na.rm=TRUE)) %>%  as.data.frame() #%>%
+#  mutate(Type = ifelse(grepl("AS", Individual), "AS", "NF")) %>% as.data.frame() %>% mutate(energy = exp(Individual_level_CO_freq))
+
+## Save the individual level co freq dataset
+saveRDS(Individual_level_CO_freq, "dataset/CO_table/Individual_level_CO_freq.rds")
+```
+
+## Average Crossover and Chromosome (Figure 2D)
+
+```{r, filename = "R script", eval = FALSE}
+
+each_sperm_chromosome_level_CO_freq <- readRDS("dataset/CO_table/each_sperm_each_chr_CO_table.rds")
+fwrite(each_sperm_chromosome_level_CO_freq,
+       "tables/each_sperm_chromosome_level_CO_freq.csv")
+
+each_chromosome_ave_CO_freq <- each_sperm_chromosome_level_CO_freq %>% dplyr::group_by(chr, Type) %>% summarize(Average_Value = mean(chromosome_CO_count))
+
+## Load the chromosome length
+
+kp <- plotKaryotype("hg38", plot.type=2, labels.plotter = NULL, ideogram.plotter	= NULL, main="", cex=0.2, chromosomes = c(paste0("chr", c(1:22))))
+
+chromosome_length <- data.frame(kp$chromosome.lengths)
+chromosome_length$chr <- c(1:22)
+chromosome_length$chr_name <- rownames(chromosome_length)
+
+colnames(chromosome_length)[1] <- "length"
+
+each_chromosome_ave_CO_freq <- left_join(each_chromosome_ave_CO_freq, chromosome_length) %>% as.data.frame()
+
+set.seed(42)
+
+ggplot(data = each_chromosome_ave_CO_freq, aes(x = length, y = Average_Value, color = Type, label = chr_name)) +
+  geom_point(size = 2, alpha = 0.8) + 
+  labs(
+       x = "Chromosome Length",
+       y = "Ave. CO Number") +
+    geom_smooth(se = FALSE, method = "gam", formula = y ~ s(log(x)), linetype = "dashed", size = 0.5) + 
+  theme_classic2() + geom_text_repel(size = 2) +  
+  scale_color_manual(values=c("coral", "cornflowerblue")) + 
+  scale_fill_manual(values=c("coral", "cornflowerblue")) +
+  theme(legend.position = "none",
+        panel.border = element_rect(
+          color = "black",
+          size = 1,
+          fill = NA
+          ),
+        text = element_text(size = 12, color = "black"),
+        axis.text.x = element_text(size = 12, color = "black", face = "bold"),  # X-axis text color
+        axis.text.y = element_text(size = 12, color = "black", face = "bold"),
+        axis.title.x = element_text(size = 12, color = "black", face = "bold"),
+        axis.title.y = element_text(size = 12, color = "black", face = "bold")
+        )
+
+ggsave(paste0("Figures/CO_stats/CO_and_chromosome.pdf"), width = 8, height = 3)  
+```
 
 First, we can check the crossover distribution of two groups.
 
 ```{r, filename = "R script", eval = FALSE}
 
-chr_level_CO_table <- readRDS("D:/sperm_project/sperm_CO_table/QUAL_RGQ_aneu_NA_removed_CO_and_clinical_assoc/final_filtered_table.rds")
+chr_level_CO_table <- readRDS("dataset/CO_table/final_filtered_table.rds")
 
 chr_level_CO_table_new <- chr_level_CO_table %>% dplyr::mutate(Type = ifelse(grepl("AS", Individual), "AS", "NF"))
 
-fwrite(chr_level_CO_table_new, "D:/sperm_project/manuscript_09_23_2023/Tables/section_3_crossover/all_co_events.csv")
+# Write the table of the all CO events
+fwrite(chr_level_CO_table_new, "tables/all_co_events.csv")
 
 #### Visulization of the crossover events ####
 
-# Make a GRanges with your data (we need to repeat column 2 as start and end for this to work)
+# Make a GRanges with data (we need to repeat column 2 as start and end for this to work)
 chr_level_CO_table_new_gr_df_AS <- chr_level_CO_table_new %>% dplyr::select(chr, start, end, Type) %>% dplyr::mutate(chr = paste0("chr", chr)) %>% dplyr::filter(Type == "AS")
 
 chr_level_CO_table_new_gr_df_NF <- chr_level_CO_table_new %>% dplyr::select(chr, start, end, Type) %>% dplyr::mutate(chr = paste0("chr", chr)) %>% dplyr::filter(Type == "NF")
 
 # Make the crosssover genomic range variable  
+
 co.gr_AS <- regioneR::toGRanges(chr_level_CO_table_new_gr_df_AS[, c("chr","start", "end")])
 co.gr_NF <- regioneR::toGRanges(chr_level_CO_table_new_gr_df_NF[, c("chr","start", "end")])
 
-pdf(file = "D:/sperm_project/manuscript_09_23_2023/Figures/section_3_CO_distribution_and_frequency_count/CO_Genome_Distribution_AS_NF_10_05_2023.pdf",   # The directory you want to save the file in
-    width = 8, # The width of the plot in inches
-    height = 11) # The height of the plot in inches
+## To calculate the density of the crossover, we calculate the co frequency in bin size  = 500000
+pdf(file = "Figures/CO_stats/CO_Genome_Distribution_Total_AS_NF.pdf", 
+    width = 8,
+    height = 11) 
 
 kp <- plotKaryotype("hg38", plot.type=2, labels.plotter = NULL, ideogram.plotter	= NULL, main="", cex=0.2, chromosomes = c(paste0("chr", c(1:22))))
 
@@ -37,36 +270,85 @@ kpAddCytobandsAsLine(kp)
 kpAddChromosomeNames(kp, srt=45, cex=0.5)
 
 kp <- kpPlotDensity(kp, data=co.gr_AS, data.panel = 1, window.size = 500000, border="black", col = "coral")
-kpAxis(kp, ymax=kp$latest.plot$computed.values$max.density, data.panel = 1, cex=0.5, side = 1)
+kpAxis(kp, ymax = kp$latest.plot$computed.values$max.density, data.panel = 1, cex=0.5, side = 1)
 
-# Note the density of AS group crossovers in the windows
+# Define the density of AS group crossovers in the windows
 AS_CO_density <- kp$latest.plot$computed.values$density
 AS_CO_windows <- as.data.frame(kp$latest.plot$computed.values$windows)
 
-AS_CO_density <- cbind(AS_CO_windows, AS_CO_density)
+## Define the AS donor average of crossover per window
+AS_donor_average_density <- AS_CO_density/52
+
+## Define the AS crossover density dataframe
+AS_CO_density <- cbind(AS_CO_windows, AS_CO_density, AS_donor_average_density)
+
 
 # kpAbline(kp, h=0, lty=1, ymax=kp$latest.plot$computed.values$max.density, data.panel = 1, col="black", lwd = 0.2)
 
 kp <- kpPlotDensity(kp, data=co.gr_NF, data.panel = 2, window.size = 500000, border="black", col = "cornflowerblue")
 kpAxis(kp, ymax=kp$latest.plot$computed.values$max.density, data.panel = 2, cex=0.5, side = 2)
 
-# Note the density of AS group crossovers in the windows
+# Save the density of AS group crossovers in the windows
 NF_CO_density <- kp$latest.plot$computed.values$density
 NF_CO_windows <- as.data.frame(kp$latest.plot$computed.values$windows)
 
-NF_CO_density <- cbind(NF_CO_windows, NF_CO_density)
+## Define the NF donor average of crossover per window
+NF_donor_average_density <- NF_CO_density/93
+
+NF_CO_density <- cbind(NF_CO_windows, NF_CO_density, NF_donor_average_density)
 
 # kpAbline(kp, h=0, lty=1, ymax=kp$latest.plot$computed.values$max.density, r0=0.6, r1=1, col="black", lwd = 2)
 legend(x = "bottom", fill = c("coral", "cornflowerblue"), legend = c("AS", "NF"), box.lwd = 4)
-
 dev.off()
+
+
+## Plot the AVE histogram
+pdf(file = "Figures/CO_stats/CO_Genome_Distribution_ave_AS_NF.pdf", 
+    width = 8,
+    height = 11) 
+
+kp <- plotKaryotype("hg38", plot.type=2, labels.plotter = NULL, ideogram.plotter	= NULL, main="", cex=0.2, chromosomes = c(paste0("chr", c(1:22))))
+
+# Plot the ideogram as a line
+kpAddCytobandsAsLine(kp)
+  
+kpAddChromosomeNames(kp, srt=45, cex=0.5)
+
+kpBars(kp, chr=AS_CO_density$seqnames, x0=AS_CO_density$start, x1=AS_CO_density$end, y1=AS_CO_density$AS_donor_average_density, y0=0, ymax = 0.1, data.panel = 1, col = "coral",border = "coral")
+
+kpBars(kp, chr=NF_CO_density$seqnames, x0=NF_CO_density$start, x1=NF_CO_density$end, y1=NF_CO_density$NF_donor_average_density, y0=0, ymax = 0.1, data.panel = 2, col = "cornflowerblue", border = "cornflowerblue")
+
+kpAxis(kp, ymax = 0.1, data.panel = 1, cex=0.5, side = 1)
+kpAxis(kp, ymax = 0.1, data.panel = 2, cex=0.5, side = 2)
+dev.off()
+
+
+## Plot the AVE histogram on chr only
+pdf(file = "Figures/CO_stats/CO_Genome_Distribution_ave_AS_NF_chr6.pdf", 
+    width = 8,
+    height = 3) 
+
+kp <- plotKaryotype("hg38", plot.type=2, labels.plotter = NULL, ideogram.plotter	= NULL, main="", cex=0.2, chromosomes = c(paste0("chr", c(6))))
+
+# Plot the ideogram as a line
+kpAddCytobandsAsLine(kp)
+  
+kpAddChromosomeNames(kp, srt=45, cex=0.5)
+
+kpBars(kp, chr=AS_CO_density$seqnames, x0=AS_CO_density$start, x1=AS_CO_density$end, y1=AS_CO_density$AS_donor_average_density, y0=0, ymax = 0.1, data.panel = 1, col = "coral",border = "coral")
+
+kpBars(kp, chr=NF_CO_density$seqnames, x0=NF_CO_density$start, x1=NF_CO_density$end, y1=NF_CO_density$NF_donor_average_density, y0=0, ymax = 0.1, data.panel = 2, col = "cornflowerblue", border = "cornflowerblue")
+
+kpAxis(kp, ymax = 0.1, data.panel = 1, cex=0.5, side = 1)
+kpAxis(kp, ymax = 0.1, data.panel = 2, cex=0.5, side = 2)
+dev.off()
+
 ```
 
-### Check the hotspot density
+### Check the hotspot density (Figure 3C)
 
 ```{r, filename = "R script", eval = FALSE}
-library(biomaRt)
-library(tidyverse)
+
 txdb <- TxDb.Hsapiens.UCSC.hg38.knownGene
 
 # Combine the AS density and NF density 
@@ -119,87 +401,4 @@ write.table(high_CO_density[, c(1:3)],
             sep = "\t", col.names = FALSE, quote = FALSE, row.names = FALSE)
 
 genes_in_the_windows <- as.vector(high_CO_density$genes)
-```
-
-## CO Frequency
-
-```{r, filename = "R script", eval = FALSE}
-
-## Load the sperm sample name list
-sperm_list_df <- fread("D:/sperm_project/sperm_vcf_file/sperm_sampleList/sperm_sample_nameList.tsv", header = F) %>% as.data.frame()
-
-## Remove the aneuploidy sperms
-
-aneuploid_sperms <- c("AS24s5", "AS30s3", "AS30s4", "AS32s4", "AS35s1", "AS41s4", "NF23-1s5", "NF25-1s1", "NF31-2s5", "N30-2s3", "N27-3s3")
-
-sperm_list_df <- sperm_list_df %>% filter(!V1 %in% aneuploid_sperms)
-
-## Unify the sperm name in normal samples
-colnames(sperm_list_df) <- "sperm_id"
-
-sperm_list_df$sperm_id <- gsub("N", "NF", sperm_list_df$sperm_id)
-sperm_list_df$sperm_id <- gsub("NFF", "NF", sperm_list_df$sperm_id)
-
-sperm_chromosome_level_CO_freq <- data.frame(sperm_id = rep(sperm_list_df[,1], each = 22),
-                                             chr = rep(c(1:22), times = length(sperm_list_df[,1])))
-
-sperm_chromosome_level_CO_freq$Individual <- gsub("s\\d$", "", sperm_chromosome_level_CO_freq$sperm_id)
-
-## Count the number of CO over chromosomes in chr_level_CO_table
-
-chr_level_CO_table_number_table <- chr_level_CO_table_new %>% group_by(Individual, sperm_id, chr) %>% 
-  summarise(chromosome_CO_count = n(),.groups = 'drop') %>%
-  as.data.frame()
-
-View(chr_level_CO_table_number_table)
-
-## Count the number of CO over chromosomes in chr_level_CO_table
-
-chr_level_CO_table_number_table <- chr_level_CO_table_new %>% group_by(Individual, sperm_id, chr) %>% 
-  summarise(chromosome_CO_count = n(),.groups = 'drop') %>%
-  as.data.frame()
-
-chr_level_CO_table_number_table$chr <- as.integer(chr_level_CO_table_number_table$chr)
-
-## Left join
-
-each_sperm_chromosome_level_CO_freq <- left_join(sperm_chromosome_level_CO_freq, chr_level_CO_table_number_table)
-
-## Delete the aneuploidy
-each_sperm_chromosome_level_CO_freq <- each_sperm_chromosome_level_CO_freq %>% dplyr::filter(!sperm_id %in% aneuploid_sperms)
-
-each_sperm_chromosome_level_CO_freq <- each_sperm_chromosome_level_CO_freq %>% mutate(chromosome_CO_count = ifelse(is.na(chromosome_CO_count), 0, chromosome_CO_count)) %>% 
-  mutate(Type = ifelse(grepl("AS", Individual), "AS", "NF"))
-
-
-
-## Ttest on chromosome number
-AS_group_count <- each_sperm_chromosome_level_CO_freq[each_sperm_chromosome_level_CO_freq$Type=="AS", "chromosome_CO_count"]
-AS_group_count[is.na(AS_group_count)] <- 0
-
-NF_group_count <- each_sperm_chromosome_level_CO_freq[each_sperm_chromosome_level_CO_freq$Type=="NF", "chromosome_CO_count"]
-NF_group_count[is.na(NF_group_count)] <- 0
-
-t.test(AS_group_count, NF_group_count)
-
-
-
-ggplot(each_sperm_chromosome_level_CO_freq, aes(x = Type, y = chromosome_CO_count)) + 
-  geom_jitter(aes(colour = Type), size = 1, width = 0.3, height = 0.5) + 
-  scale_color_manual(values=c("coral", "cornflowerblue"))+
-  facet_wrap( . ~ chr) + ylim(c(0,15))
-
-ggplot(each_sperm_chromosome_level_CO_freq, aes(x = Type, y = chromosome_CO_count)) + 
-  geom_jitter(aes(colour = Type), size = 1, width = 0.3, height = 0.4) + 
-  scale_color_manual(values=c("coral", "cornflowerblue"))+
-  ylim(c(0,10))
-  
-  
-## Make the table about Sperm level average crossover
-
-sperm_level_ave_chr_CO_freq <- each_sperm_chromosome_level_CO_freq %>% 
-  group_by(sperm_id) %>% 
-  summarise(Sperm_ave_all_chr_level_CO = mean(chromosome_CO_count, na.rm=TRUE)) %>%  as.data.frame() %>%
-  mutate(Type = ifelse(grepl("AS", sperm_id ), "AS", "NF")) %>% as.data.frame()
-
 ```

@@ -42,4 +42,7 @@ library(GGally)
 library(regioneR)
 library(CopyNumberPlots)
 library(ggpmisc)
+library(TxDb.Hsapiens.UCSC.hg38.knownGene)
+library(scales)
+library(ggthemes)
 ```

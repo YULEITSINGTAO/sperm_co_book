@@ -5,7 +5,7 @@
 ```{r, filename = "R script", eval = FALSE}
 
 ## calculate the individual based sperm average CO of each chromosome
-each_sperm_chromosome_level_CO_freq <- readRDS("D:/sperm_project/sperm_CO_table/QUAL_RGQ_aneu_NA_removed_CO_and_clinical_assoc/each_sperm_each_chr_CO_table.rds")
+each_sperm_chromosome_level_CO_freq <- readRDS("dataset/CO_table/each_sperm_each_chr_CO_table.rds")
 
 individual_average_chromosome_level_CO_freq <- each_sperm_chromosome_level_CO_freq %>% group_by(Individual, chr) %>% summarise(ave_CO = mean(chromosome_CO_count), .groups = 'drop')
 
@@ -54,9 +54,6 @@ write.table(include_sample_list, file = "D:/sperm_project/GEMMA/Blood_and_CO/inc
 impute_new_fam_file <- as.data.frame(blood_name_fam_file) %>% mutate_if(is.numeric, ~replace_na(.,mean(., na.rm = TRUE)))
 
 impute_new_fam_file <- impute_new_fam_file[, -6]
-
-
- 
 ```
 
 

@@ -5,7 +5,7 @@ In this section, we discuss the association between crossover freqneucy and clin
 ## Association between CO and Age (Figure 2 F)
 
 ```{r, filename = "R script", eval = FALSE}
-Individual_level_CO_freq <- readRDS("D:/sperm_project/sperm_CO_table/QUAL_RGQ_aneu_NA_removed_CO_and_clinical_assoc/Individual_level_CO_freq.rds")
+Individual_level_CO_freq <- readRDS("dataset/CO_and_clinical_outcome_tables/Individual_level_CO_freq.rds")
 
 Individual_level_CO_freq$Age <- NA
 
@@ -13,14 +13,14 @@ Individual_level_CO_freq[grepl("AS", Individual_level_CO_freq$Individual), "Age"
 Individual_level_CO_freq[grepl("NF", Individual_level_CO_freq$Individual), "Age"] <- gsub("NF", "", Individual_level_CO_freq[grepl("NF", Individual_level_CO_freq$Individual), "Individual"])
 Individual_level_CO_freq$Age <- gsub("-\\d","", Individual_level_CO_freq$Age) %>% as.integer()
 
-ggplot(data = Individual_level_CO_freq, aes(x = Individual_level_CO_freq, y = Age, color = Type)) +
+ggplot(data = Individual_level_CO_freq, aes(x = Age, y = Individual_level_CO_freq, color = Type)) +
   ggpmisc::stat_poly_eq(aes(label = paste(after_stat(eq.label),
                                after_stat(rr.label), sep = "*\", \"*"))) +
   stat_poly_line(se = FALSE) +
   geom_point(size = 1) + 
   labs(
-       x = "Individual Level CO Frequency",
-       y = "Age (in years)") +
+       x = "Age (in years)",
+       y = "Individual Level CO Frequency") +
   scale_color_manual(values=c("coral", "cornflowerblue")) + theme_classic2() +
   theme(legend.position = "top",
         panel.border = element_rect(
@@ -34,9 +34,9 @@ ggplot(data = Individual_level_CO_freq, aes(x = Individual_level_CO_freq, y = Ag
         axis.title.x = element_text(size = 12, color = "black", face = "bold"),
         axis.title.y = element_text(size = 12, color = "black", face = "bold")
         ) + 
-  xlim(c(0.5,1.75)) + ylim(c(20,60))
+  xlim(c(20,50)) + ylim(c(0.75,1.75))
 
-ggsave(paste0("D:/sperm_project/manuscript_09_23_2023/Figures/section_3_CO_distribution_and_frequency_count/CO_and_age.pdf"), width = 3.5, height = 4)  
+ggsave(paste0("Figures/CO_and_clinical_outcomes/CO_and_age.pdf"), width = 3.5, height = 4)  
 ```
 
 
