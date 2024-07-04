@@ -54,7 +54,7 @@ ggplot(crossover_count, aes(Type, chromosome_CO_count, fill= percentage)) +
 ggsave(paste0("Figures/CO_stats/each_chromosome_CO.pdf"), width = 4, height = 4)  
 
 
-# Create a basic bar chart for one group
+# make the pyramid plot
 
 basic_plot <-  ggplot(
     crossover_count, 
@@ -62,15 +62,17 @@ basic_plot <-  ggplot(
         x = chromosome_CO_count, 
         fill = Type, 
         y = ifelse(
-            test = Type == "AS", 
-            yes = -percentage, 
-            no = percentage
-            )
+          test = Type == "AS", 
+          yes = -percentage, 
+          no = percentage
+          )
         )
     ) + 
-geom_bar(stat = "identity") 
+  scale_fill_manual(values = c("coral", "cornflowerblue")) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = percentage), vjust = 0)
 
-population_pyramid <- basic_plot +
+CO_pyramid_plot <- basic_plot +
   scale_y_continuous(
     labels = abs, 
     limits = max(crossover_count$percentage) * c(-1,1)
@@ -83,6 +85,7 @@ population_pyramid <- basic_plot +
     fill = "Group", 
     title = ""
   )
+ggsave(paste0("Figures/CO_stats/CO_pyramid_plot.pdf"), width = 4, height = 4)  
 
 ```
 
